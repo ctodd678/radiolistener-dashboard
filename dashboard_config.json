@@ -3,13 +3,13 @@
     {
       "name": "CHUM 104.5",
       "vmid": 105,
-      "path": "/root/radiolistener",
+      "path": "/mnt/ct105-radiolistener",
       "color": "#e8484a"
     },
     {
       "name": "Virgin Radio",
       "vmid": 106,
-      "path": "/root/radiolistener",
+      "path": "/mnt/ct106-radiolistener",
       "color": "#4d9de0"
     }
   ]
