@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radio Listener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0a0b;
+    --surface:  #111114;
+    --border:   #1e1e24;
+    --text:     #e8e8f0;
+    --muted:    #55556a;
+    --green:    #3ddc84;
+    --red:      #ff4d6d;
+    --yellow:   #ffd166;
+    --font-display: 'Syne', sans-serif;
+    --font-mono:    'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,11,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  #clock {
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+
+  .refresh-btn:hover {
+    border-color: var(--text);
+    color: var(--text);
+  }
+
+  main {
+    padding: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* station grid */
+  .stations-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .station-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+    position: relative;
+  }
+
+  .station-card:hover {
+    border-color: #333340;
+    transform: translateY(-1px);
+  }
+
+  .station-card.active {
+    border-color: var(--accent, #e8484a);
+  }
+
+  .station-card-top {
+    padding: 16px 18px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .station-accent-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+
+  .station-name {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .station-vmid {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+  }
+
+  .status-badge.running {
+    color: var(--green);
+    border-color: rgba(61,220,132,0.3);
+    background: rgba(61,220,132,0.07);
+  }
+
+  .status-badge.stopped {
+    color: var(--muted);
+    border-color: var(--border);
+  }
+
+  .status-badge.unknown {
+    color: var(--yellow);
+    border-color: rgba(255,209,102,0.3);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .status-badge.running .status-dot {
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .station-card-body {
+    padding: 14px 18px;
+  }
+
+  .station-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .stat-item {}
+
+  .stat-label {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-value.small {
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  /* sparkline */
+  .sparkline {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 32px;
+    margin-top: 8px;
+  }
+
+  .spark-bar {
+    flex: 1;
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    transition: height 0.3s ease;
+    opacity: 0.7;
+  }
+
+  .station-card-footer {
+    padding: 10px 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 7px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .btn:hover { background: #1a1a20; }
+
+  .btn.btn-start {
+    color: var(--green);
+    border-color: rgba(61,220,132,0.3);
+  }
+
+  .btn.btn-start:hover { background: rgba(61,220,132,0.08); }
+
+  .btn.btn-stop {
+    color: var(--red);
+    border-color: rgba(255,77,109,0.3);
+  }
+
+  .btn.btn-stop:hover { background: rgba(255,77,109,0.08); }
+
+  /* detail panel */
+  .detail-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    display: none;
+  }
+
+  .detail-panel.visible { display: block; }
+
+  .detail-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+  }
+
+  .tab {
+    padding: 14px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s;
+    user-select: none;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--text); }
+
+  .tab-content { display: none; padding: 20px; }
+  .tab-content.active { display: block; }
+
+  /* log viewer */
+  .log-viewer {
+    background: #0d0d10;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    height: 420px;
+    overflow-y: auto;
+    font-size: 11.5px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .log-viewer::-webkit-scrollbar { width: 6px; }
+  .log-viewer::-webkit-scrollbar-track { background: transparent; }
+  .log-viewer::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .log-line-detect { color: #ffd166; }
+  .log-line-error  { color: var(--red); }
+  .log-line-match  { color: var(--green); }
+  .log-line-excl   { color: #666680; }
+  .log-line-crash  { color: #ff9a5c; }
+  .log-line-batch  { color: #7eb8f7; }
+  .log-line-normal { color: #8888a0; }
+
+  /* detections table */
+  .detections-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .detections-table th {
+    text-align: left;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0 12px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detections-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #16161c;
+    vertical-align: top;
+    font-size: 12px;
+  }
+
+  .detections-table tr:last-child td { border-bottom: none; }
+
+  .detection-time {
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .detection-text {
+    color: var(--text);
+    line-height: 1.5;
+    max-width: 600px;
+  }
+
+  /* keyword editor */
+  .kw-section {
+    margin-bottom: 20px;
+  }
+
+  .kw-section-label {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .kw-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .kw-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #16161c;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+  }
+
+  .kw-tag-remove {
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    transition: color 0.1s;
+  }
+
+  .kw-tag-remove:hover { color: var(--red); }
+
+  .kw-add-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .kw-input {
+    flex: 1;
+    background: #0d0d10;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 12px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .kw-input:focus { border-color: #333340; }
+
+  .kw-save-btn {
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    padding: 8px 20px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-top: 16px;
+  }
+
+  .kw-save-btn:hover { opacity: 0.85; }
+
+  /* toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 18px;
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 9998;
+    pointer-events: none;
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #toast.success { border-color: rgba(61,220,132,0.4); color: var(--green); }
+  #toast.error   { border-color: rgba(255,77,109,0.4); color: var(--red); }
+
+  .empty-state {
+    color: var(--muted);
+    text-align: center;
+    padding: 40px;
+  }
+
+  .loading {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    RADIO LISTENER
+  </div>
+  <div class="header-right">
+    <span id="clock"></span>
+    <button class="refresh-btn" onclick="loadAll()">↺ refresh</button>
+  </div>
+</header>
+
+<main>
+  <div class="stations-grid" id="stations-grid">
+    <div class="loading">loading stations...</div>
+  </div>
+
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-tabs" id="detail-tabs">
+      <div class="tab active" data-tab="detections">Detections</div>
+      <div class="tab" data-tab="log">App Log</div>
+      <div class="tab" data-tab="transcript">Transcript</div>
+      <div class="tab" data-tab="keywords">Keywords</div>
+    </div>
+    <div class="tab-content active" id="tab-detections"></div>
+    <div class="tab-content" id="tab-log"></div>
+    <div class="tab-content" id="tab-transcript"></div>
+    <div class="tab-content" id="tab-keywords"></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+let selectedVmid = null;
+let stations = [];
+let refreshInterval = null;
+
+// --- clock ---
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-CA', { hour12: false });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// --- toast ---
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  setTimeout(() => { el.className = ''; }, 2500);
+}
+
+// --- tab switching ---
+document.getElementById('detail-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  const id = `tab-${tab.dataset.tab}`;
+  document.getElementById(id).classList.add('active');
+  if (selectedVmid) loadTabContent(tab.dataset.tab, selectedVmid);
+});
+
+// --- load stations ---
+async function loadAll() {
+  try {
+    const res = await fetch(`${API}/api/stations`);
+    stations = await res.json();
+    renderStations(stations);
+    if (selectedVmid) {
+      const activeTab = document.querySelector('.tab.active')?.dataset.tab;
+      if (activeTab) loadTabContent(activeTab, selectedVmid);
+    }
+  } catch (e) {
+    document.getElementById('stations-grid').innerHTML =
+      `<div class="loading" style="color:#ff4d6d">failed to load stations — is the backend running?</div>`;
+  }
+}
+
+function renderStations(stations) {
+  const grid = document.getElementById('stations-grid');
+  if (!stations.length) {
+    grid.innerHTML = '<div class="loading">no stations configured</div>';
+    return;
+  }
+
+  grid.innerHTML = stations.map(s => {
+    const color      = s.color || '#e8484a';
+    const isRunning  = s.service_active;
+    const statusText = s.container_status === 'running'
+      ? (s.service_active ? 'live' : 'ct running')
+      : s.container_status;
+    const statusClass = s.service_active ? 'running'
+      : s.container_status === 'stopped' ? 'stopped' : 'unknown';
+
+    // build sparkline — hours 6-19 for weekdays
+    const hours = Array.from({length: 14}, (_, i) => i + 6);
+    const maxCount = Math.max(...hours.map(h => s.hour_counts?.[h] || 0), 1);
+    const sparks = hours.map(h => {
+      const count = s.hour_counts?.[h] || 0;
+      const height = count ? Math.max(20, Math.round((count / maxCount) * 100)) : 8;
+      const opacity = count ? 1 : 0.15;
+      return `<div class="spark-bar" style="height:${height}%;background:${color};opacity:${opacity}" title="${h}:00 — ${count} detections"></div>`;
+    }).join('');
+
+    const lastDet = s.last_detection
+      ? s.last_detection.split(' ')[1].slice(0,5)
+      : '—';
+
+    const isActive = s.vmid === selectedVmid;
+
+    return `
+      <div class="station-card${isActive ? ' active' : ''}"
+           style="--accent:${color}"
+           onclick="selectStation(${s.vmid})">
+        <div class="station-accent-bar" style="background:${color}"></div>
+        <div class="station-card-top">
+          <div>
+            <div class="station-name">${s.name}</div>
+            <div class="station-vmid">CT ${s.vmid}</div>
+          </div>
+          <div class="status-badge ${statusClass}">
+            <div class="status-dot"></div>
+            ${statusText}
+          </div>
+        </div>
+        <div class="station-card-body">
+          <div class="station-stats">
+            <div class="stat-item">
+              <div class="stat-label">detections today</div>
+              <div class="stat-value">${s.detections_today}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">last detection</div>
+              <div class="stat-value small">${lastDet}</div>
+            </div>
+          </div>
+          <div class="sparkline">${sparks}</div>
+        </div>
+        <div class="station-card-footer">
+          <button class="btn btn-start" onclick="event.stopPropagation(); stationAction(${s.vmid}, 'start')">▶ start</button>
+          <button class="btn btn-stop"  onclick="event.stopPropagation(); stationAction(${s.vmid}, 'stop')">■ stop</button>
+          <button class="btn" onclick="event.stopPropagation(); selectStation(${s.vmid})">details →</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// --- select station ---
+function selectStation(vmid) {
+  selectedVmid = vmid;
+  document.querySelectorAll('.station-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.station-card').forEach(c => {
+    if (c.onclick?.toString().includes(vmid)) c.classList.add('active');
+  });
+  // re-render to update active state
+  renderStations(stations);
+
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('visible');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'detections';
+  loadTabContent(activeTab, vmid);
+}
+
+// --- tab content loaders ---
+async function loadTabContent(tab, vmid) {
+  if (tab === 'detections') loadDetections(vmid);
+  else if (tab === 'log') loadLog(vmid);
+  else if (tab === 'transcript') loadTranscript(vmid);
+  else if (tab === 'keywords') loadKeywords(vmid);
+}
+
+async function loadDetections(vmid) {
+  const el = document.getElementById('tab-detections');
+  el.innerHTML = '<div class="loading">loading...</div>';
+  try {
+    const res  = await fetch(`${API}/api/station/${vmid}/detections`);
+    const data = await res.json();
+
+    if (!data.length) {
+      el.innerHTML = '<div class="empty-state">no detections today</div>';
+      return;
+    }
+
+    const rows = [...data].reverse().map(d => `
+      <tr>
+        <td class="detection-time">${d.timestamp.split(' ')[1].slice(0,5)}</td>
+        <td class="detection-text">${escapeHtml(d.text)}</td>
+      </tr>`).join('');
+
+    el.innerHTML = `
+      <table class="detections-table">
+        <thead><tr><th>TIME</th><th>TEXT</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state" style="color:#ff4d6d">failed to load</div>`;
+  }
+}
+
+async function loadLog(vmid) {
+  const el = document.getElementById('tab-log');
+  el.innerHTML = '<div class="loading">loading...</div>';
+  try {
+    const res  = await fetch(`${API}/api/station/${vmid}/log?lines=300`);
+    const data = await res.json();
+    el.innerHTML = `<div class="log-viewer" id="log-content">${colorizeLog(data.log)}</div>`;
+    const lv = document.getElementById('log-content');
+    lv.scrollTop = lv.scrollHeight;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state" style="color:#ff4d6d">failed to load</div>`;
+  }
+}
+
+async function loadTranscript(vmid) {
+  const el = document.getElementById('tab-transcript');
+  el.innerHTML = '<div class="loading">loading...</div>';
+  try {
+    const res  = await fetch(`${API}/api/station/${vmid}/transcript?lines=150`);
+    const data = await res.json();
+    el.innerHTML = `<div class="log-viewer">${escapeHtml(data.transcript)}</div>`;
+    const lv = el.querySelector('.log-viewer');
+    lv.scrollTop = lv.scrollHeight;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state" style="color:#ff4d6d">failed to load</div>`;
+  }
+}
+
+// keyword editor state
+let kwData = null;
+
+async function loadKeywords(vmid) {
+  const el = document.getElementById('tab-keywords');
+  el.innerHTML = '<div class="loading">loading...</div>';
+  try {
+    const res = await fetch(`${API}/api/station/${vmid}/keywords`);
+    kwData = await res.json();
+    renderKeywordEditor(el, vmid);
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state" style="color:#ff4d6d">failed to load keywords.json</div>`;
+  }
+}
+
+function renderKeywordEditor(el, vmid) {
+  const sections = [
+    { key: 'strict_keywords',  label: 'Strict Phrases' },
+    { key: 'shortcodes',       label: 'Shortcodes' },
+    { key: 'prize_keywords',   label: 'Prize Keywords' },
+    { key: 'exclude_keywords', label: 'Exclusions' },
+  ];
+
+  const html = sections.map(sec => {
+    const items = kwData[sec.key] || [];
+    const tags = items.map((item, i) => `
+      <div class="kw-tag">
+        <span>${escapeHtml(item)}</span>
+        <span class="kw-tag-remove" onclick="removeKwItem('${sec.key}', ${i})">×</span>
+      </div>`).join('');
+
+    return `
+      <div class="kw-section">
+        <div class="kw-section-label">${sec.label}</div>
+        <div class="kw-tags" id="tags-${sec.key}">${tags}</div>
+        <div class="kw-add-row">
+          <input class="kw-input" id="input-${sec.key}" placeholder="add new..." onkeydown="if(event.key==='Enter') addKwItem('${sec.key}')">
+          <button class="btn" style="flex:0;white-space:nowrap" onclick="addKwItem('${sec.key}')">+ add</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = html + `<button class="kw-save-btn" onclick="saveKeywords(${vmid})">save keywords.json</button>`;
+}
+
+function removeKwItem(key, index) {
+  kwData[key].splice(index, 1);
+  const el = document.getElementById('tab-keywords');
+  renderKeywordEditor(el, selectedVmid);
+}
+
+function addKwItem(key) {
+  const input = document.getElementById(`input-${key}`);
+  const val = input.value.trim();
+  if (!val) return;
+  if (!kwData[key]) kwData[key] = [];
+  kwData[key].push(val);
+  input.value = '';
+  const el = document.getElementById('tab-keywords');
+  renderKeywordEditor(el, selectedVmid);
+}
+
+async function saveKeywords(vmid) {
+  try {
+    const res = await fetch(`${API}/api/station/${vmid}/keywords`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: kwData })
+    });
+    if (res.ok) toast('keywords.json saved — reloads in ~60s');
+    else toast('save failed', 'error');
+  } catch(e) {
+    toast('save failed', 'error');
+  }
+}
+
+// --- start / stop ---
+async function stationAction(vmid, action) {
+  try {
+    const res = await fetch(`${API}/api/station/${vmid}/${action}`, { method: 'POST' });
+    if (res.ok) {
+      toast(`${action} sent to CT ${vmid}`);
+      setTimeout(loadAll, 2000);
+    } else {
+      toast(`${action} failed`, 'error');
+    }
+  } catch(e) {
+    toast(`${action} failed`, 'error');
+  }
+}
+
+// --- log colorizer ---
+function colorizeLog(raw) {
+  return escapeHtml(raw).split('\n').map(line => {
+    if (line.includes('KEYWORD DETECTED') || line.includes('[!]'))
+      return `<span class="log-line-detect">${line}</span>`;
+    if (line.includes('STRICT MATCH') || line.includes('SPELLING MATCH') || line.includes('SHORTCODE MATCH'))
+      return `<span class="log-line-match">${line}</span>`;
+    if (line.includes('[EXCLUDED]'))
+      return `<span class="log-line-excl">${line}</span>`;
+    if (line.includes('crash') || line.includes('stall') || line.includes('error') || line.includes('Error'))
+      return `<span class="log-line-crash">${line}</span>`;
+    if (line.includes('[BATCH]') || line.includes('HEARTBEAT') || line.includes('SCHEDULER'))
+      return `<span class="log-line-batch">${line}</span>`;
+    return `<span class="log-line-normal">${line}</span>`;
+  }).join('\n');
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// --- init ---
+loadAll();
+refreshInterval = setInterval(loadAll, 30000); // auto-refresh every 30s
+</script>
+</body>
+</html>
