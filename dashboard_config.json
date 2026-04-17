@@ -2,13 +2,13 @@
   "stations": [
     {
       "name": "CHUM 104.5",
-      "vmid": 106,
+      "vmid": 105,
       "path": "/root/radiolistener",
       "color": "#e8484a"
     },
     {
       "name": "Virgin Radio",
-      "vmid": 107,
+      "vmid": 106,
       "path": "/root/radiolistener",
       "color": "#4d9de0"
     }
