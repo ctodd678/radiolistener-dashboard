@@ -33,16 +33,7 @@ API_TIMEOUT = 5
 
 def load_config():
     if not os.path.exists(DASHBOARD_CONFIG_PATH):
-        default = {
-            "stations": [
-                {
-                    "name": "CHUM 104.5",
-                    "vmid": 105,
-                    "api_url": "http://10.0.0.105:5001",
-                    "color": "#e8484a"
-                }
-            ]
-        }
+        default = {"stations": []}
         with open(DASHBOARD_CONFIG_PATH, "w") as f:
             json.dump(default, f, indent=2)
         return default
@@ -91,6 +82,14 @@ async def api_post(url, path, json_body):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def find_station(vmid):
+    config = load_config()
+    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
+    if not s:
+        raise HTTPException(status_code=404, detail="Station not found")
+    return s
+
+
 # --- stations ---
 
 @app.get("/api/stations")
@@ -101,7 +100,6 @@ async def get_stations():
     for s in config["stations"]:
         vmid    = s["vmid"]
         api_url = s["api_url"]
-        color   = s.get("color", "#ffffff")
 
         ct_status   = get_container_status(vmid)
         status_data = await api_get(api_url, "/status")
@@ -118,7 +116,7 @@ async def get_stations():
         stations.append({
             "name":               s["name"],
             "vmid":               vmid,
-            "color":              color,
+            "color":              s.get("color", "#ffffff"),
             "api_url":            api_url,
             "container_status":   ct_status,
             "api_reachable":      status_data is not None,
@@ -134,37 +132,25 @@ async def get_stations():
 
 @app.get("/api/station/{vmid}/detections")
 async def get_detections(vmid: int):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     return await api_get(s["api_url"], "/detections") or []
 
 
 @app.get("/api/station/{vmid}/log")
 async def get_log(vmid: int, lines: int = 300):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     return await api_get(s["api_url"], "/log", params={"lines": lines}) or {"log": ""}
 
 
 @app.get("/api/station/{vmid}/transcript")
 async def get_transcript(vmid: int, lines: int = 150):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     return await api_get(s["api_url"], "/transcript", params={"lines": lines}) or {"transcript": ""}
 
 
 @app.get("/api/station/{vmid}/keywords")
 async def get_keywords(vmid: int):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     data = await api_get(s["api_url"], "/keywords")
     if data is None:
         raise HTTPException(status_code=404, detail="Could not reach container API")
@@ -177,21 +163,13 @@ class KeywordsUpdate(BaseModel):
 
 @app.post("/api/station/{vmid}/keywords")
 async def update_keywords(vmid: int, body: KeywordsUpdate):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     return await api_post(s["api_url"], "/keywords", {"data": body.data})
 
 
-# --- station config.json editor ---
-
 @app.get("/api/station/{vmid}/config")
 async def get_station_config(vmid: int):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     data = await api_get(s["api_url"], "/config")
     if data is None:
         raise HTTPException(status_code=404, detail="Could not reach container API")
@@ -204,14 +182,16 @@ class StationConfigUpdate(BaseModel):
 
 @app.post("/api/station/{vmid}/config")
 async def update_station_config(vmid: int, body: StationConfigUpdate):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     return await api_post(s["api_url"], "/config", {"data": body.data})
 
 
-# --- keyword tester ---
+@app.get("/api/station/{vmid}/schedule")
+async def get_schedule(vmid: int):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], "/schedule")
+    return data or {"slots": [], "updated_at": None, "summary": None}
+
 
 class TestPayload(BaseModel):
     text: str
@@ -220,14 +200,11 @@ class TestPayload(BaseModel):
 
 @app.post("/api/station/{vmid}/test")
 async def test_keywords(vmid: int, body: TestPayload):
-    config = load_config()
-    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
-    if not s:
-        raise HTTPException(status_code=404, detail="Station not found")
+    s = find_station(vmid)
     return await api_post(s["api_url"], "/test", {"text": body.text, "keywords": body.keywords})
 
 
-# --- dashboard config editor ---
+# --- dashboard config ---
 
 @app.get("/api/dashboard/config")
 def get_dashboard_config():

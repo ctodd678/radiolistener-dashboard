@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Radio Listener</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
@@ -21,15 +22,13 @@
   .logo { font-family: var(--font-display); font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
   .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
-  .header-right { display: flex; align-items: center; gap: 16px; }
-  #clock { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  #clock { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
   .header-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; transition: all .15s; }
   .header-btn:hover { border-color: var(--text); color: var(--text); }
-  .header-btn.active { border-color: var(--blue); color: var(--blue); }
 
   main { padding: 28px 32px; max-width: 1500px; margin: 0 auto; }
 
-  /* station grid */
   .stations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-bottom: 28px; }
   .station-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; position: relative; }
   .station-card:hover { border-color: #333340; transform: translateY(-1px); }
@@ -39,7 +38,6 @@
   .station-card-top { padding: 14px 16px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border); }
   .station-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 3px; }
   .station-vmid { color: var(--muted); font-size: 11px; }
-
   .status-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
   .status-badge { display: flex; align-items: center; gap: 5px; font-size: 10px; padding: 3px 8px; border-radius: 20px; border: 1px solid; white-space: nowrap; }
   .status-badge.running { color: var(--green); border-color: rgba(61,220,132,.3); background: rgba(61,220,132,.07); }
@@ -54,7 +52,6 @@
   .stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
   .stat-value { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .stat-value.small { font-size: 12px; font-weight: 400; }
-
   .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 28px; margin-top: 6px; }
   .spark-bar { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; transition: height .3s; }
 
@@ -66,7 +63,6 @@
   .btn.btn-stop { color: var(--red); border-color: rgba(255,77,109,.3); }
   .btn.btn-stop:hover { background: rgba(255,77,109,.08); }
 
-  /* detail panel */
   .detail-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: none; }
   .detail-panel.visible { display: block; }
   .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
@@ -78,24 +74,32 @@
   .tab-content { display: none; padding: 20px; }
   .tab-content.active { display: block; }
 
-  /* log viewer */
   .log-viewer { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 14px; height: 400px; overflow-y: auto; font-size: 11.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
   .log-viewer::-webkit-scrollbar { width: 5px; }
   .log-viewer::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   .log-line-detect { color: #ffd166; }
-  .log-line-error  { color: var(--red); }
   .log-line-match  { color: var(--green); }
-  .log-line-excl   { color: #505060; }
+  .log-line-excl   { color: #404055; }
   .log-line-crash  { color: #ff9a5c; }
   .log-line-batch  { color: var(--blue); }
-  .log-line-normal { color: #7070888; }
 
-  /* detections table */
   .detections-table { width: 100%; border-collapse: collapse; }
   .detections-table th { text-align: left; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 0 12px 10px; border-bottom: 1px solid var(--border); }
   .detections-table td { padding: 10px 12px; border-bottom: 1px solid #16161c; vertical-align: top; font-size: 12px; }
   .detections-table tr:last-child td { border-bottom: none; }
   .detection-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  /* keyword schedule grid */
+  .schedule-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .schedule-updated { font-size: 11px; color: var(--muted); }
+  .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .schedule-slot { background: #0d0d10; border: 1px solid var(--border); border-radius: 6px; padding: 12px; text-align: center; transition: border-color .15s; }
+  .schedule-slot.has-keyword { border-color: rgba(61,220,132,.3); background: rgba(61,220,132,.04); }
+  .schedule-slot.current-hour { border-color: var(--yellow); background: rgba(255,209,102,.06); }
+  .slot-hour { font-size: 10px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  .slot-keyword { font-family: var(--font-display); font-size: 15px; font-weight: 800; letter-spacing: -.5px; }
+  .slot-keyword.found { color: var(--green); }
+  .slot-keyword.unclear { color: var(--border); font-size: 12px; font-weight: 400; font-family: var(--font-mono); }
 
   /* keyword editor */
   .kw-section { margin-bottom: 20px; }
@@ -111,12 +115,13 @@
   .save-btn:hover { opacity: .85; }
 
   /* config editor */
-  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .config-field { display: flex; flex-direction: column; gap: 6px; }
   .config-field.full { grid-column: 1 / -1; }
   .config-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
   .config-input { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; transition: border-color .15s; }
   .config-input:focus { border-color: #333340; }
+  .config-section { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; margin: 20px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
   .config-toggle { display: flex; align-items: center; gap: 10px; }
   .toggle { position: relative; width: 36px; height: 20px; cursor: pointer; }
   .toggle input { opacity: 0; width: 0; height: 0; }
@@ -124,38 +129,36 @@
   .toggle input:checked + .toggle-track { background: rgba(61,220,132,.2); border-color: var(--green); }
   .toggle-thumb { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; background: var(--muted); border-radius: 50%; transition: .2s; }
   .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); background: var(--green); }
+  .hours-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-  /* keyword tester */
+  /* tester */
   .test-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .test-input-area { display: flex; flex-direction: column; gap: 10px; }
-  .test-textarea { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 12px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; resize: vertical; min-height: 160px; line-height: 1.6; transition: border-color .15s; }
+  .test-textarea { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 12px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; resize: vertical; min-height: 160px; line-height: 1.6; width: 100%; }
   .test-textarea:focus { border-color: #333340; }
-  .test-btn { background: none; border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; transition: all .15s; }
+  .test-btn { background: none; border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; transition: all .15s; margin-top: 10px; }
   .test-btn:hover { background: #1a1a20; }
   .test-results { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 14px; min-height: 200px; }
-  .test-verdict { font-family: var(--font-display); font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+  .test-verdict { font-family: var(--font-display); font-size: 18px; font-weight: 800; margin-bottom: 6px; }
   .test-verdict.detected { color: var(--green); }
   .test-verdict.excluded { color: var(--yellow); }
   .test-verdict.nomatch  { color: var(--muted); }
-  .test-reason { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .test-reason { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
   .test-rule { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid #16161c; font-size: 11.5px; }
   .test-rule:last-child { border-bottom: none; }
-  .test-rule-icon { width: 16px; flex-shrink: 0; text-align: center; margin-top: 1px; }
-  .test-rule-body { flex: 1; }
+  .test-rule-icon { width: 16px; flex-shrink: 0; text-align: center; }
   .test-rule-name { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
   .test-rule-match { color: var(--text); margin-top: 2px; }
 
-  /* dashboard config editor */
-  .dc-station { background: #0d0d10; border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+  /* dashboard config modal */
+  .dc-station { background: #0d0d10; border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 10px; }
   .dc-station-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .dc-station-title { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
-  .dc-remove-btn { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; transition: color .15s; line-height: 1; }
+  .dc-remove-btn { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
   .dc-remove-btn:hover { color: var(--red); }
   .dc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .dc-add-btn { background: none; border: 1px dashed var(--border); color: var(--muted); padding: 10px; border-radius: 6px; width: 100%; font-family: var(--font-mono); font-size: 12px; cursor: pointer; transition: all .15s; margin-top: 4px; }
   .dc-add-btn:hover { border-color: var(--text); color: var(--text); }
 
-  /* toast */
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; font-size: 12px; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; z-index: 9998; pointer-events: none; }
   #toast.show { opacity: 1; transform: translateY(0); }
   #toast.success { border-color: rgba(61,220,132,.4); color: var(--green); }
@@ -187,14 +190,16 @@
       <div class="detail-title" id="detail-title">—</div>
     </div>
     <div class="detail-tabs" id="detail-tabs">
-      <div class="tab active" data-tab="detections">Detections</div>
+      <div class="tab active" data-tab="schedule">Schedule</div>
+      <div class="tab" data-tab="detections">Detections</div>
       <div class="tab" data-tab="log">App Log</div>
       <div class="tab" data-tab="transcript">Transcript</div>
       <div class="tab" data-tab="keywords">Keywords</div>
       <div class="tab" data-tab="config">Station Config</div>
       <div class="tab" data-tab="test">Keyword Tester</div>
     </div>
-    <div class="tab-content active" id="tab-detections"></div>
+    <div class="tab-content active" id="tab-schedule"></div>
+    <div class="tab-content" id="tab-detections"></div>
     <div class="tab-content" id="tab-log"></div>
     <div class="tab-content" id="tab-transcript"></div>
     <div class="tab-content" id="tab-keywords"></div>
@@ -203,12 +208,12 @@
   </div>
 </main>
 
-<!-- dashboard config modal overlay -->
+<!-- dashboard config modal -->
 <div id="dc-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;backdrop-filter:blur(4px)" onclick="closeDashboardConfig()"></div>
 <div id="dc-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;width:min(700px,95vw);max-height:85vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
     <div style="font-family:var(--font-display);font-size:16px;font-weight:800">Dashboard Config</div>
-    <button onclick="closeDashboardConfig()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">×</button>
+    <button onclick="closeDashboardConfig()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">×</button>
   </div>
   <div id="dc-editor"></div>
   <button class="save-btn" onclick="saveDashboardConfig()">save dashboard_config.json</button>
@@ -225,8 +230,7 @@ let cfgData = null;
 let dcData = null;
 
 function updateClock() {
-  document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('en-CA', { hour12: false });
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-CA', { hour12: false });
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -248,7 +252,6 @@ document.getElementById('detail-tabs').addEventListener('click', e => {
   if (selectedVmid) loadTabContent(tab.dataset.tab, selectedVmid);
 });
 
-// --- stations ---
 async function loadAll() {
   try {
     const res = await fetch(`${API}/api/stations`);
@@ -258,9 +261,8 @@ async function loadAll() {
       const activeTab = document.querySelector('.tab.active')?.dataset.tab;
       if (activeTab) loadTabContent(activeTab, selectedVmid);
     }
-  } catch(e) {
-    document.getElementById('stations-grid').innerHTML =
-      `<div class="loading" style="color:var(--red)">failed to load — is the backend running?</div>`;
+  } catch {
+    document.getElementById('stations-grid').innerHTML = `<div class="loading" style="color:var(--red)">failed to load — is the backend running?</div>`;
   }
 }
 
@@ -271,28 +273,17 @@ function renderStations(stations) {
   grid.innerHTML = stations.map(s => {
     const color = s.color || '#e8484a';
     const isActive = s.vmid === selectedVmid;
-
-    // container status badge
     const ctClass = s.container_status === 'running' ? 'running' : s.container_status === 'stopped' ? 'stopped' : 'unknown';
-    const ctLabel = s.container_status;
-
-    // radioscout badge
     const rsClass = s.radioscout_running ? 'running' : (s.api_reachable ? 'stopped' : 'unknown');
     const rsLabel = s.radioscout_running ? 'radioscout live' : (s.api_reachable ? 'radioscout stopped' : 'unreachable');
-
-    // rlapi badge
     const raClass = s.rlapi_running ? 'running' : 'warn';
-    const raLabel = s.rlapi_running ? 'api live' : 'api down';
-
-    // sparkline hours 6-19
     const hours = Array.from({length:14},(_,i)=>i+6);
     const maxC = Math.max(...hours.map(h=>s.hour_counts?.[h]||0), 1);
     const sparks = hours.map(h => {
       const c = s.hour_counts?.[h]||0;
-      const h2 = c ? Math.max(20, Math.round(c/maxC*100)) : 8;
+      const h2 = c ? Math.max(20,Math.round(c/maxC*100)) : 8;
       return `<div class="spark-bar" style="height:${h2}%;background:${color};opacity:${c?1:.15}" title="${h}:00 — ${c}"></div>`;
     }).join('');
-
     const lastDet = s.last_detection ? s.last_detection.split(' ')[1].slice(0,5) : '—';
 
     return `
@@ -304,9 +295,9 @@ function renderStations(stations) {
             <div class="station-vmid">CT ${s.vmid}</div>
           </div>
           <div class="status-badges">
-            <div class="status-badge ${ctClass}"><div class="status-dot"></div>${ctLabel}</div>
+            <div class="status-badge ${ctClass}"><div class="status-dot"></div>${s.container_status}</div>
             <div class="status-badge ${rsClass}"><div class="status-dot"></div>${rsLabel}</div>
-            ${s.api_reachable ? `<div class="status-badge ${raClass}"><div class="status-dot"></div>${raLabel}</div>` : ''}
+            ${s.api_reachable ? `<div class="status-badge ${raClass}"><div class="status-dot"></div>${s.rlapi_running?'api live':'api down'}</div>` : ''}
           </div>
         </div>
         <div class="station-card-body">
@@ -318,7 +309,7 @@ function renderStations(stations) {
         </div>
         <div class="station-card-footer">
           <button class="btn btn-start" onclick="event.stopPropagation();stationAction(${s.vmid},'start')">▶ start</button>
-          <button class="btn btn-stop"  onclick="event.stopPropagation();stationAction(${s.vmid},'stop')">■ stop</button>
+          <button class="btn btn-stop" onclick="event.stopPropagation();stationAction(${s.vmid},'stop')">■ stop</button>
           <button class="btn" onclick="event.stopPropagation();selectStation(${s.vmid})">details →</button>
         </div>
       </div>`;
@@ -333,17 +324,59 @@ function selectStation(vmid) {
   const panel = document.getElementById('detail-panel');
   panel.classList.add('visible');
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'detections';
+  const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'schedule';
   loadTabContent(activeTab, vmid);
 }
 
 async function loadTabContent(tab, vmid) {
-  if (tab === 'detections') loadDetections(vmid);
+  if      (tab === 'schedule')   loadSchedule(vmid);
+  else if (tab === 'detections') loadDetections(vmid);
   else if (tab === 'log')        loadLog(vmid);
   else if (tab === 'transcript') loadTranscript(vmid);
   else if (tab === 'keywords')   loadKeywords(vmid);
   else if (tab === 'config')     loadStationConfig(vmid);
   else if (tab === 'test')       loadTester(vmid);
+}
+
+// --- schedule ---
+async function loadSchedule(vmid) {
+  const el = document.getElementById('tab-schedule');
+  el.innerHTML = '<div class="loading">loading...</div>';
+  try {
+    const data = await fetch(`${API}/api/station/${vmid}/schedule`).then(r=>r.json());
+    const slots = data.slots || [];
+    const currentHour = new Date().getHours();
+
+    if (!slots.length) {
+      el.innerHTML = '<div class="empty-state">no schedule data yet — generates after the midday or end-of-day batch runs</div>';
+      return;
+    }
+
+    const updatedLabel = data.updated_at
+      ? `last updated ${data.updated_at.split(' ')[1].slice(0,5)} (${data.summary || ''})`
+      : 'no batch run yet today';
+
+    const grid = slots.map(slot => {
+      const hasKeyword  = slot.keyword && slot.keyword !== 'unclear';
+      const isCurrent   = slot.hour === currentHour;
+      const cls = `schedule-slot${hasKeyword?' has-keyword':''}${isCurrent?' current-hour':''}`;
+      const kwCls = hasKeyword ? 'found' : 'unclear';
+      const kwText = hasKeyword ? slot.keyword.toUpperCase() : '—';
+      return `<div class="${cls}">
+        <div class="slot-hour">${slot.label}</div>
+        <div class="slot-keyword ${kwCls}">${esc(kwText)}</div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="schedule-header">
+        <div class="section-title" style="margin:0">Today's Keywords</div>
+        <div class="schedule-updated">${updatedLabel}</div>
+      </div>
+      <div class="schedule-grid">${grid}</div>`;
+  } catch {
+    el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
+  }
 }
 
 // --- detections ---
@@ -358,7 +391,7 @@ async function loadDetections(vmid) {
       <tbody>${[...data].reverse().map(d=>`
         <tr>
           <td class="detection-time">${d.timestamp.split(' ')[1].slice(0,5)}</td>
-          <td>${esc(d.text)}</td>
+          <td style="font-size:12px;line-height:1.5">${esc(d.text)}</td>
         </tr>`).join('')}</tbody>
     </table>`;
   } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
@@ -383,12 +416,11 @@ async function loadTranscript(vmid) {
   try {
     const data = await fetch(`${API}/api/station/${vmid}/transcript?lines=150`).then(r=>r.json());
     el.innerHTML = `<div class="log-viewer">${esc(data.transcript)}</div>`;
-    const lv = el.querySelector('.log-viewer');
-    lv.scrollTop = lv.scrollHeight;
+    el.querySelector('.log-viewer').scrollTop = 999999;
   } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
 }
 
-// --- keywords editor ---
+// --- keywords ---
 async function loadKeywords(vmid) {
   const el = document.getElementById('tab-keywords');
   el.innerHTML = '<div class="loading">loading...</div>';
@@ -424,11 +456,9 @@ function renderKwEditor(el, vmid) {
 function removeKw(key, i) { kwData[key].splice(i,1); renderKwEditor(document.getElementById('tab-keywords'), selectedVmid); }
 function addKw(key) {
   const inp = document.getElementById(`kwinput-${key}`);
-  const v = inp.value.trim();
-  if (!v) return;
+  const v = inp.value.trim(); if (!v) return;
   if (!kwData[key]) kwData[key] = [];
-  kwData[key].push(v);
-  inp.value = '';
+  kwData[key].push(v); inp.value = '';
   renderKwEditor(document.getElementById('tab-keywords'), selectedVmid);
 }
 async function saveKeywords(vmid) {
@@ -438,19 +468,21 @@ async function saveKeywords(vmid) {
   } catch { toast('save failed','error'); }
 }
 
-// --- station config editor ---
+// --- station config ---
 async function loadStationConfig(vmid) {
   const el = document.getElementById('tab-config');
   el.innerHTML = '<div class="loading">loading...</div>';
   try {
     cfgData = await fetch(`${API}/api/station/${vmid}/config`).then(r=>r.json());
     renderCfgEditor(el, vmid);
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load config.json</div>`; }
+  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
 }
 
 function renderCfgEditor(el, vmid) {
-  const hrs = Array.isArray(cfgData.heartbeat_hours) ? cfgData.heartbeat_hours.join(', ') : '';
+  const hrs  = Array.isArray(cfgData.heartbeat_hours) ? cfgData.heartbeat_hours.join(', ') : '';
   const recs = Array.isArray(cfgData.recipients) ? cfgData.recipients.join(', ') : '';
+  const runWeekends = cfgData.run_weekends !== false;
+
   el.innerHTML = `
     <div class="config-grid">
       <div class="config-field">
@@ -489,16 +521,55 @@ function renderCfgEditor(el, vmid) {
         </div>
       </div>
     </div>
+
+    <div class="config-section">Contest Hours</div>
+    <div class="config-grid">
+      <div class="config-field">
+        <div class="config-label">Weekday Start (24h)</div>
+        <input class="config-input" type="number" id="cfg-weekday_start" min="0" max="23" value="${cfgData.weekday_start??6}">
+      </div>
+      <div class="config-field">
+        <div class="config-label">Weekday End (24h)</div>
+        <input class="config-input" type="number" id="cfg-weekday_end" min="0" max="23" value="${cfgData.weekday_end??20}">
+      </div>
+      <div class="config-field">
+        <div class="config-label">Midday Summary Hour (24h)</div>
+        <input class="config-input" type="number" id="cfg-midday_hour" min="0" max="23" value="${cfgData.midday_hour??13}">
+      </div>
+      <div class="config-field">
+        <div class="config-label">Run Weekends</div>
+        <div class="config-toggle">
+          <label class="toggle">
+            <input type="checkbox" id="cfg-run_weekends" ${runWeekends?'checked':''}>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+          <span id="weekends-label" style="font-size:12px;color:var(--muted)">${runWeekends?'yes':'no'}</span>
+        </div>
+      </div>
+      <div class="config-field">
+        <div class="config-label">Weekend Start (24h)</div>
+        <input class="config-input" type="number" id="cfg-weekend_start" min="0" max="23" value="${cfgData.weekend_start??13}">
+      </div>
+      <div class="config-field">
+        <div class="config-label">Weekend End (24h)</div>
+        <input class="config-input" type="number" id="cfg-weekend_end" min="0" max="23" value="${cfgData.weekend_end??18}">
+      </div>
+    </div>
+
     <button class="save-btn" onclick="saveStationConfig(${vmid})" style="margin-top:20px">save config.json</button>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted)">note: passwords and API keys are not shown or modified here</div>`;
+    <div style="margin-top:10px;font-size:11px;color:var(--muted)">note: passwords and API keys are not shown or modified here — restart radioscout after saving for changes to take effect</div>`;
 
   document.getElementById('cfg-instant_alerts').addEventListener('change', e => {
     document.getElementById('instant-label').textContent = e.target.checked ? 'on' : 'off';
   });
+  document.getElementById('cfg-run_weekends').addEventListener('change', e => {
+    document.getElementById('weekends-label').textContent = e.target.checked ? 'yes' : 'no';
+  });
 }
 
 async function saveStationConfig(vmid) {
-  const hrs = document.getElementById('cfg-heartbeat_hours').value.split(',').map(x=>parseInt(x.trim())).filter(n=>!isNaN(n));
+  const hrs  = document.getElementById('cfg-heartbeat_hours').value.split(',').map(x=>parseInt(x.trim())).filter(n=>!isNaN(n));
   const recs = document.getElementById('cfg-recipients').value.split(',').map(x=>x.trim()).filter(Boolean);
   const payload = {
     station_name:           document.getElementById('cfg-station_name').value.trim(),
@@ -508,33 +579,35 @@ async function saveStationConfig(vmid) {
     heartbeat_hours:        hrs,
     crash_alert_threshold:  parseInt(document.getElementById('cfg-crash_alert_threshold').value),
     instant_alerts:         document.getElementById('cfg-instant_alerts').checked,
+    weekday_start:          parseInt(document.getElementById('cfg-weekday_start').value),
+    weekday_end:            parseInt(document.getElementById('cfg-weekday_end').value),
+    weekend_start:          parseInt(document.getElementById('cfg-weekend_start').value),
+    weekend_end:            parseInt(document.getElementById('cfg-weekend_end').value),
+    run_weekends:           document.getElementById('cfg-run_weekends').checked,
+    midday_hour:            parseInt(document.getElementById('cfg-midday_hour').value),
   };
   try {
     const r = await fetch(`${API}/api/station/${vmid}/config`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({data: payload}) });
-    r.ok ? toast('config.json saved — restart service for changes to take effect') : toast('save failed','error');
+    r.ok ? toast('config.json saved — restart radioscout for changes to take effect') : toast('save failed','error');
   } catch { toast('save failed','error'); }
 }
 
-// --- keyword tester ---
+// --- tester ---
 async function loadTester(vmid) {
   const el = document.getElementById('tab-test');
-  // load current keywords for the test
-  let kw = kwData;
-  if (!kw) {
-    try { kw = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json()); } catch { kw = {}; }
+  if (!kwData) {
+    try { kwData = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json()); } catch { kwData = {}; }
   }
   el.innerHTML = `
     <div class="test-layout">
-      <div class="test-input-area">
+      <div>
         <div class="section-title">paste transcript snippet</div>
-        <textarea class="test-textarea" id="test-input" placeholder="Paste a raw transcript chunk here to test detection rules against the current keywords..."></textarea>
+        <textarea class="test-textarea" id="test-input" placeholder="Paste a raw transcript chunk here..."></textarea>
         <button class="test-btn" onclick="runTest(${vmid})">▶ run detection test</button>
       </div>
       <div>
         <div class="section-title">result</div>
-        <div class="test-results" id="test-results">
-          <div style="color:var(--muted);font-size:12px">paste a snippet and hit run</div>
-        </div>
+        <div class="test-results" id="test-results"><div style="color:var(--muted);font-size:12px">paste a snippet and hit run</div></div>
       </div>
     </div>`;
 }
@@ -542,55 +615,47 @@ async function loadTester(vmid) {
 async function runTest(vmid) {
   const text = document.getElementById('test-input').value.trim();
   if (!text) { toast('paste some text first','error'); return; }
-
-  let kw = kwData;
-  if (!kw) {
-    try { kw = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json()); } catch { kw = {}; }
-  }
-
+  if (!kwData) { try { kwData = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json()); } catch { kwData = {}; } }
   const resultsEl = document.getElementById('test-results');
   resultsEl.innerHTML = '<div style="color:var(--muted);font-size:12px">running...</div>';
-
   try {
     const r = await fetch(`${API}/api/station/${vmid}/test`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, keywords: kw })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, keywords: kwData })
     });
     const data = await r.json();
-
-    const verdictClass = data.detected ? 'detected' : (data.verdict === 'EXCLUDED' ? 'excluded' : 'nomatch');
-    const verdictIcon  = data.detected ? '✓' : (data.verdict === 'EXCLUDED' ? '⊘' : '✗');
-
-    const rules = (data.results || []).map(rule => {
-      const icon = rule.fired ? (rule.verdict === 'MATCH' ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--red)">⊘</span>') : '<span style="color:var(--muted)">–</span>';
+    const vClass = data.detected ? 'detected' : (data.verdict==='EXCLUDED'?'excluded':'nomatch');
+    const vIcon  = data.detected ? '✓' : (data.verdict==='EXCLUDED'?'⊘':'✗');
+    const rules  = (data.results||[]).map(rule => {
+      const icon = rule.fired
+        ? (rule.verdict==='MATCH'?`<span style="color:var(--green)">✓</span>`:`<span style="color:var(--red)">⊘</span>`)
+        : `<span style="color:var(--muted)">–</span>`;
       return `<div class="test-rule">
         <div class="test-rule-icon">${icon}</div>
-        <div class="test-rule-body">
+        <div>
           <div class="test-rule-name">${esc(rule.rule)}</div>
-          ${rule.match ? `<div class="test-rule-match">${esc(rule.match)}</div>` : ''}
-          ${rule.verdict && rule.verdict !== 'MATCH' ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(rule.verdict)}</div>` : ''}
+          ${rule.match?`<div class="test-rule-match">${esc(rule.match)}</div>`:''}
+          ${rule.verdict&&rule.verdict!=='MATCH'?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(rule.verdict)}</div>`:''}
         </div>
       </div>`;
     }).join('');
-
     resultsEl.innerHTML = `
-      <div class="test-verdict ${verdictClass}">${verdictIcon} ${data.verdict}</div>
+      <div class="test-verdict ${vClass}">${vIcon} ${data.verdict}</div>
       <div class="test-reason">${esc(data.reason)}</div>
       ${rules}`;
   } catch(e) {
-    resultsEl.innerHTML = `<div style="color:var(--red);font-size:12px">test failed: ${esc(String(e))}</div>`;
+    resultsEl.innerHTML = `<div style="color:var(--red);font-size:12px">test failed</div>`;
   }
 }
 
-// --- dashboard config editor ---
+// --- dashboard config modal ---
 async function openDashboardConfig() {
   try {
     dcData = await fetch(`${API}/api/dashboard/config`).then(r=>r.json());
     renderDcEditor();
     document.getElementById('dc-overlay').style.display = 'block';
     document.getElementById('dc-modal').style.display = 'block';
-  } catch { toast('failed to load dashboard config','error'); }
+  } catch { toast('failed to load','error'); }
 }
 
 function closeDashboardConfig() {
@@ -611,21 +676,21 @@ function renderDcEditor() {
           <div class="dc-grid">
             <div class="config-field">
               <div class="config-label">Name</div>
-              <input class="config-input" value="${esc(s.name)}" oninput="dcUpdate(${i},'name',this.value)">
+              <input class="config-input" value="${esc(s.name)}" oninput="dcData.stations[${i}].name=this.value">
             </div>
             <div class="config-field">
               <div class="config-label">VMID</div>
-              <input class="config-input" type="number" value="${s.vmid}" oninput="dcUpdate(${i},'vmid',parseInt(this.value))">
+              <input class="config-input" type="number" value="${s.vmid}" oninput="dcData.stations[${i}].vmid=parseInt(this.value)">
             </div>
-            <div class="config-field full">
+            <div class="config-field" style="grid-column:1/-1">
               <div class="config-label">API URL</div>
-              <input class="config-input" value="${esc(s.api_url)}" oninput="dcUpdate(${i},'api_url',this.value)">
+              <input class="config-input" value="${esc(s.api_url)}" oninput="dcData.stations[${i}].api_url=this.value">
             </div>
             <div class="config-field">
               <div class="config-label">Accent Color</div>
               <div style="display:flex;gap:8px;align-items:center">
-                <input type="color" value="${s.color||'#ffffff'}" oninput="dcUpdate(${i},'color',this.value)" style="background:none;border:1px solid var(--border);border-radius:4px;width:40px;height:32px;cursor:pointer;padding:2px">
-                <input class="config-input" value="${esc(s.color||'#ffffff')}" oninput="dcUpdate(${i},'color',this.value)" style="flex:1">
+                <input type="color" value="${s.color||'#ffffff'}" oninput="dcData.stations[${i}].color=this.value" style="background:none;border:1px solid var(--border);border-radius:4px;width:40px;height:32px;cursor:pointer;padding:2px">
+                <input class="config-input" value="${esc(s.color||'#ffffff')}" oninput="dcData.stations[${i}].color=this.value" style="flex:1">
               </div>
             </div>
           </div>
@@ -634,42 +699,21 @@ function renderDcEditor() {
     <button class="dc-add-btn" onclick="dcAddStation()">+ add station</button>`;
 }
 
-function dcUpdate(i, key, val) {
-  dcData.stations[i][key] = val;
-  // sync color text input with color picker without full re-render
-}
-
-function dcRemoveStation(i) {
-  dcData.stations.splice(i, 1);
-  renderDcEditor();
-}
-
-function dcAddStation() {
-  dcData.stations.push({ name: 'New Station', vmid: 100, api_url: 'http://0.0.0.0:5001', color: '#4d9de0' });
-  renderDcEditor();
-}
+function dcRemoveStation(i) { dcData.stations.splice(i,1); renderDcEditor(); }
+function dcAddStation() { dcData.stations.push({name:'New Station',vmid:100,api_url:'http://0.0.0.0:5001',color:'#4d9de0'}); renderDcEditor(); }
 
 async function saveDashboardConfig() {
   try {
-    const r = await fetch(`${API}/api/dashboard/config`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ data: dcData })
-    });
-    if (r.ok) {
-      toast('dashboard_config.json saved');
-      closeDashboardConfig();
-      setTimeout(loadAll, 500);
-    } else {
-      toast('save failed','error');
-    }
+    const r = await fetch(`${API}/api/dashboard/config`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({data: dcData}) });
+    if (r.ok) { toast('saved'); closeDashboardConfig(); setTimeout(loadAll, 500); }
+    else toast('save failed','error');
   } catch { toast('save failed','error'); }
 }
 
 // --- start/stop ---
 async function stationAction(vmid, action) {
   try {
-    const r = await fetch(`${API}/api/station/${vmid}/${action}`, { method:'POST' });
+    const r = await fetch(`${API}/api/station/${vmid}/${action}`, {method:'POST'});
     r.ok ? (toast(`${action} sent`), setTimeout(loadAll, 2000)) : toast(`${action} failed`,'error');
   } catch { toast(`${action} failed`,'error'); }
 }
@@ -677,12 +721,12 @@ async function stationAction(vmid, action) {
 // --- helpers ---
 function colorizeLog(raw) {
   return esc(raw).split('\n').map(line => {
-    if (line.includes('KEYWORD DETECTED') || line.includes('[!]')) return `<span class="log-line-detect">${line}</span>`;
-    if (line.includes('STRICT MATCH') || line.includes('SPELLING MATCH') || line.includes('SHORTCODE MATCH')) return `<span class="log-line-match">${line}</span>`;
-    if (line.includes('[EXCLUDED]') || line.includes('[HALLUCINATION]')) return `<span class="log-line-excl">${line}</span>`;
-    if (line.includes('crash') || line.includes('stall') || line.includes('error') || line.includes('Error')) return `<span class="log-line-crash">${line}</span>`;
-    if (line.includes('[BATCH]') || line.includes('HEARTBEAT') || line.includes('SCHEDULER')) return `<span class="log-line-batch">${line}</span>`;
-    return `<span style="color:#606070">${line}</span>`;
+    if (line.includes('KEYWORD DETECTED')||line.includes('[!]')) return `<span class="log-line-detect">${line}</span>`;
+    if (line.includes('STRICT MATCH')||line.includes('SPELLING MATCH')||line.includes('SHORTCODE MATCH')) return `<span class="log-line-match">${line}</span>`;
+    if (line.includes('[EXCLUDED]')||line.includes('[HALLUCINATION]')) return `<span class="log-line-excl">${line}</span>`;
+    if (line.includes('crash')||line.includes('stall')||line.includes('Error')) return `<span class="log-line-crash">${line}</span>`;
+    if (line.includes('[BATCH]')||line.includes('HEARTBEAT')||line.includes('SCHEDULER')) return `<span class="log-line-batch">${line}</span>`;
+    return `<span style="color:#505065">${line}</span>`;
   }).join('\n');
 }
 
