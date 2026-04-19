@@ -1632,13 +1632,46 @@
 
     // --- copy ---
     function copyRaw(text, btn) {
-      navigator.clipboard.writeText(text).then(() => {
+      function onSuccess() {
         if (btn) {
           btn.textContent = 'copied!';
           btn.classList.add('copied');
           setTimeout(() => { btn.textContent = 'copy all'; btn.classList.remove('copied'); }, 2000);
         }
-      }).catch(() => toast('copy failed — try selecting manually', 'error'));
+      }
+
+      // try modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, btn));
+      } else {
+        fallbackCopy(text, btn);
+      }
+    }
+
+    function fallbackCopy(text, btn) {
+      // fallback for http (non-secure) contexts like local IP access
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) {
+          if (btn) {
+            btn.textContent = 'copied!';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = 'copy all'; btn.classList.remove('copied'); }, 2000);
+          }
+        } else {
+          toast('copy failed — try Ctrl+A then Ctrl+C in the viewer', 'error');
+        }
+      } catch {
+        document.body.removeChild(ta);
+        toast('copy failed — try Ctrl+A then Ctrl+C in the viewer', 'error');
+      }
     }
 
     // --- archive ---

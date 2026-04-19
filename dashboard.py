@@ -1,963 +1,303 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Radio Listener</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0a0b; --surface: #111114; --border: #1e1e24;
-    --text: #e8e8f0; --muted: #55556a; --green: #3ddc84;
-    --red: #ff4d6d; --yellow: #ffd166; --blue: #7eb8f7;
-    --font-display: 'Syne', sans-serif; --font-mono: 'DM Mono', monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--font-mono); font-size: 13px; min-height: 100vh; }
-  body::before { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); pointer-events: none; z-index: 9999; }
-
-  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(10,10,11,0.92); backdrop-filter: blur(12px); z-index: 100; }
-  .logo { font-family: var(--font-display); font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
-  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
-  .header-right { display: flex; align-items: center; gap: 12px; }
-  #clock { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
-  .header-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; transition: all .15s; }
-  .header-btn:hover { border-color: var(--text); color: var(--text); }
-
-  main { padding: 28px 32px; max-width: 1500px; margin: 0 auto; }
-
-  .stations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-bottom: 28px; }
-  .station-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; position: relative; }
-  .station-card:hover { border-color: #333340; transform: translateY(-1px); }
-  .station-card.active { border-color: var(--accent, #e8484a); }
-  .station-accent-bar { position: absolute; top: 0; left: 0; right: 0; height: 2px; }
-
-  .station-card-top { padding: 14px 16px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border); }
-  .station-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 3px; }
-  .station-vmid { color: var(--muted); font-size: 11px; }
-  .status-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-  .status-badge { display: flex; align-items: center; gap: 5px; font-size: 10px; padding: 3px 8px; border-radius: 20px; border: 1px solid; white-space: nowrap; }
-  .status-badge.running { color: var(--green); border-color: rgba(61,220,132,.3); background: rgba(61,220,132,.07); }
-  .status-badge.stopped { color: var(--muted); border-color: var(--border); }
-  .status-badge.unknown { color: var(--yellow); border-color: rgba(255,209,102,.3); }
-  .status-badge.warn { color: var(--yellow); border-color: rgba(255,209,102,.3); background: rgba(255,209,102,.07); }
-  .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-  .status-badge.running .status-dot { animation: pulse 1.5s ease-in-out infinite; }
-
-  .station-card-body { padding: 12px 16px; }
-  .station-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-  .stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
-  .stat-value { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .stat-value.small { font-size: 12px; font-weight: 400; }
-  .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 28px; margin-top: 6px; }
-  .spark-bar { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; transition: height .3s; }
-
-  .station-card-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 6px; }
-  .btn { flex: 1; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--text); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all .15s; text-align: center; }
-  .btn:hover { background: #1a1a20; }
-  .btn.btn-start { color: var(--green); border-color: rgba(61,220,132,.3); }
-  .btn.btn-start:hover { background: rgba(61,220,132,.08); }
-  .btn.btn-stop { color: var(--red); border-color: rgba(255,77,109,.3); }
-  .btn.btn-stop:hover { background: rgba(255,77,109,.08); }
-
-  .detail-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: none; }
-  .detail-panel.visible { display: block; }
-  .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
-  .detail-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; }
-  .detail-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 20px; overflow-x: auto; }
-  .tab { padding: 12px 14px; font-size: 12px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; user-select: none; white-space: nowrap; }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--text); border-bottom-color: var(--text); }
-  .tab-content { display: none; padding: 20px; }
-  .tab-content.active { display: block; }
-
-  .log-viewer { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 14px; height: 400px; overflow-y: auto; font-size: 11.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
-  .log-viewer::-webkit-scrollbar { width: 5px; }
-  .log-viewer::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  .log-line-detect { color: #ffd166; }
-  .log-line-match  { color: var(--green); }
-  .log-line-excl   { color: #404055; }
-  .log-line-crash  { color: #ff9a5c; }
-  .log-line-batch  { color: var(--blue); }
-
-  .detections-table { width: 100%; border-collapse: collapse; }
-  .detections-table th { text-align: left; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 0 12px 10px; border-bottom: 1px solid var(--border); }
-  .detections-table td { padding: 10px 12px; border-bottom: 1px solid #16161c; vertical-align: top; font-size: 12px; }
-  .detections-table tr:last-child td { border-bottom: none; }
-  .detection-time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-  /* keyword schedule grid */
-  .schedule-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-  .schedule-updated { font-size: 11px; color: var(--muted); }
-  .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-  .schedule-slot { background: #0d0d10; border: 1px solid var(--border); border-radius: 6px; padding: 12px; text-align: center; transition: border-color .15s; }
-  .schedule-slot.has-keyword { border-color: rgba(61,220,132,.3); background: rgba(61,220,132,.04); }
-  .schedule-slot.current-hour { border-color: var(--yellow); background: rgba(255,209,102,.06); }
-  .slot-hour { font-size: 10px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
-  .slot-keyword { font-family: var(--font-display); font-size: 15px; font-weight: 800; letter-spacing: -.5px; }
-  .slot-keyword.found { color: var(--green); }
-  .slot-keyword.unclear { color: var(--border); font-size: 12px; font-weight: 400; font-family: var(--font-mono); }
-
-  /* keyword editor */
-  .kw-section { margin-bottom: 20px; }
-  .kw-section-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
-  .kw-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
-  .kw-tag { display: flex; align-items: center; gap: 5px; background: #16161c; border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 11.5px; }
-  .kw-tag-remove { color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; transition: color .1s; }
-  .kw-tag-remove:hover { color: var(--red); }
-  .kw-add-row { display: flex; gap: 8px; }
-  .kw-input { flex: 1; background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 7px 12px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; transition: border-color .15s; }
-  .kw-input:focus { border-color: #333340; }
-  .save-btn { background: var(--text); color: var(--bg); border: none; border-radius: 4px; padding: 8px 20px; font-family: var(--font-display); font-size: 12px; font-weight: 700; cursor: pointer; transition: opacity .15s; margin-top: 16px; }
-  .save-btn:hover { opacity: .85; }
-
-  /* config editor */
-  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .config-field { display: flex; flex-direction: column; gap: 6px; }
-  .config-field.full { grid-column: 1 / -1; }
-  .config-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
-  .config-input { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; transition: border-color .15s; }
-  .config-input:focus { border-color: #333340; }
-  .config-section { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; margin: 20px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
-  .config-toggle { display: flex; align-items: center; gap: 10px; }
-  .toggle { position: relative; width: 36px; height: 20px; cursor: pointer; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .toggle-track { position: absolute; inset: 0; background: #1a1a24; border: 1px solid var(--border); border-radius: 20px; transition: .2s; }
-  .toggle input:checked + .toggle-track { background: rgba(61,220,132,.2); border-color: var(--green); }
-  .toggle-thumb { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; background: var(--muted); border-radius: 50%; transition: .2s; }
-  .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); background: var(--green); }
-  .hours-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-  /* tester */
-  .test-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .test-textarea { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 12px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; resize: vertical; min-height: 160px; line-height: 1.6; width: 100%; }
-  .test-textarea:focus { border-color: #333340; }
-  .test-btn { background: none; border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; transition: all .15s; margin-top: 10px; }
-  .test-btn:hover { background: #1a1a20; }
-  .test-results { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 14px; min-height: 200px; }
-  .test-verdict { font-family: var(--font-display); font-size: 18px; font-weight: 800; margin-bottom: 6px; }
-  .test-verdict.detected { color: var(--green); }
-  .test-verdict.excluded { color: var(--yellow); }
-  .test-verdict.nomatch  { color: var(--muted); }
-  .test-reason { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-  .test-rule { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid #16161c; font-size: 11.5px; }
-  .test-rule:last-child { border-bottom: none; }
-  .test-rule-icon { width: 16px; flex-shrink: 0; text-align: center; }
-  .test-rule-name { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
-  .test-rule-match { color: var(--text); margin-top: 2px; }
-
-  /* dashboard config modal */
-  .dc-station { background: #0d0d10; border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 10px; }
-  .dc-station-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .dc-station-title { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
-  .dc-remove-btn { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
-  .dc-remove-btn:hover { color: var(--red); }
-  .dc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .dc-add-btn { background: none; border: 1px dashed var(--border); color: var(--muted); padding: 10px; border-radius: 6px; width: 100%; font-family: var(--font-mono); font-size: 12px; cursor: pointer; transition: all .15s; margin-top: 4px; }
-  .dc-add-btn:hover { border-color: var(--text); color: var(--text); }
-
-  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; font-size: 12px; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; z-index: 9998; pointer-events: none; }
-  #toast.show { opacity: 1; transform: translateY(0); }
-  #toast.success { border-color: rgba(61,220,132,.4); color: var(--green); }
-  #toast.error   { border-color: rgba(255,77,109,.4); color: var(--red); }
-
-  .empty-state { color: var(--muted); text-align: center; padding: 40px; }
-  .loading { color: var(--muted); font-size: 12px; padding: 20px; text-align: center; }
-  .section-title { font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 14px; }
-
-  /* copy button */
-  .copy-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all .15s; }
-  .copy-btn:hover { border-color: var(--text); color: var(--text); }
-  .copy-btn.copied { border-color: rgba(61,220,132,.4); color: var(--green); }
-
-  /* archive */
-  .archive-layout { display: grid; grid-template-columns: 180px 1fr; gap: 16px; min-height: 400px; }
-  .archive-dates { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; overflow-y: auto; max-height: 500px; }
-  .archive-date-item { padding: 10px 14px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #16161c; transition: background .1s; font-variant-numeric: tabular-nums; }
-  .archive-date-item:hover { background: #16161c; }
-  .archive-date-item.active { background: #1a1a24; color: var(--text); }
-  .archive-date-item:last-child { border-bottom: none; }
-  .archive-content { display: flex; flex-direction: column; gap: 12px; }
-  .archive-subtabs { display: flex; gap: 8px; margin-bottom: 4px; }
-  .archive-subtab { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all .15s; }
-  .archive-subtab:hover { color: var(--text); }
-  .archive-subtab.active { border-color: var(--text); color: var(--text); }
-</style>
-</head>
-<body>
-
-<header>
-  <div class="logo"><div class="logo-dot"></div>RADIO LISTENER</div>
-  <div class="header-right">
-    <span id="clock"></span>
-    <button class="header-btn" onclick="openDashboardConfig()">⚙ dashboard config</button>
-    <button class="header-btn" onclick="loadAll()">↺ refresh</button>
-  </div>
-</header>
-
-<main>
-  <div class="stations-grid" id="stations-grid">
-    <div class="loading">loading stations...</div>
-  </div>
-
-  <div class="detail-panel" id="detail-panel">
-    <div class="detail-header">
-      <div class="detail-title" id="detail-title">—</div>
-    </div>
-    <div class="detail-tabs" id="detail-tabs">
-      <div class="tab active" data-tab="schedule">Schedule</div>
-      <div class="tab" data-tab="detections">Detections</div>
-      <div class="tab" data-tab="log">App Log</div>
-      <div class="tab" data-tab="transcript">Transcript</div>
-      <div class="tab" data-tab="keywords">Keywords</div>
-      <div class="tab" data-tab="config">Station Config</div>
-      <div class="tab" data-tab="test">Keyword Tester</div>
-      <div class="tab" data-tab="archive">Archive</div>
-    </div>
-    <div class="tab-content active" id="tab-schedule"></div>
-    <div class="tab-content" id="tab-detections"></div>
-    <div class="tab-content" id="tab-log"></div>
-    <div class="tab-content" id="tab-transcript"></div>
-    <div class="tab-content" id="tab-keywords"></div>
-    <div class="tab-content" id="tab-config"></div>
-    <div class="tab-content" id="tab-test"></div>
-    <div class="tab-content" id="tab-archive"></div>
-  </div>
-</main>
-
-<!-- dashboard config modal -->
-<div id="dc-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;backdrop-filter:blur(4px)" onclick="closeDashboardConfig()"></div>
-<div id="dc-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:501;width:min(700px,95vw);max-height:85vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-    <div style="font-family:var(--font-display);font-size:16px;font-weight:800">Dashboard Config</div>
-    <button onclick="closeDashboardConfig()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">×</button>
-  </div>
-  <div id="dc-editor"></div>
-  <button class="save-btn" onclick="saveDashboardConfig()">save dashboard_config.json</button>
-</div>
-
-<div id="toast"></div>
-
-<script>
-const API = '';
-let selectedVmid = null;
-let stations = [];
-let kwData = null;
-let cfgData = null;
-let dcData = null;
-
-function updateClock() {
-  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-CA', { hour12: false });
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-function toast(msg, type = 'success') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `show ${type}`;
-  setTimeout(() => { el.className = ''; }, 2500);
-}
-
-document.getElementById('detail-tabs').addEventListener('click', e => {
-  const tab = e.target.closest('.tab');
-  if (!tab) return;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
-  if (selectedVmid) loadTabContent(tab.dataset.tab, selectedVmid);
-});
-
-async function loadAll() {
-  try {
-    const res = await fetch(`${API}/api/stations`);
-    stations = await res.json();
-    renderStations(stations);
-    if (selectedVmid) {
-      const activeTab = document.querySelector('.tab.active')?.dataset.tab;
-      if (activeTab) loadTabContent(activeTab, selectedVmid);
-    }
-  } catch {
-    document.getElementById('stations-grid').innerHTML = `<div class="loading" style="color:var(--red)">failed to load — is the backend running?</div>`;
-  }
-}
-
-function renderStations(stations) {
-  const grid = document.getElementById('stations-grid');
-  if (!stations.length) { grid.innerHTML = '<div class="loading">no stations configured</div>'; return; }
-
-  grid.innerHTML = stations.map(s => {
-    const color = s.color || '#e8484a';
-    const isActive = s.vmid === selectedVmid;
-    const ctClass = s.container_status === 'running' ? 'running' : s.container_status === 'stopped' ? 'stopped' : 'unknown';
-    const rsClass = s.radioscout_running ? 'running' : (s.api_reachable ? 'stopped' : 'unknown');
-    const rsLabel = s.radioscout_running ? 'radioscout live' : (s.api_reachable ? 'radioscout stopped' : 'unreachable');
-    const raClass = s.rlapi_running ? 'running' : 'warn';
-    const hours = Array.from({length:14},(_,i)=>i+6);
-    const maxC = Math.max(...hours.map(h=>s.hour_counts?.[h]||0), 1);
-    const sparks = hours.map(h => {
-      const c = s.hour_counts?.[h]||0;
-      const h2 = c ? Math.max(20,Math.round(c/maxC*100)) : 8;
-      return `<div class="spark-bar" style="height:${h2}%;background:${color};opacity:${c?1:.15}" title="${h}:00 — ${c}"></div>`;
-    }).join('');
-    const lastDet = s.last_detection ? s.last_detection.split(' ')[1].slice(0,5) : '—';
-
-    return `
-      <div class="station-card${isActive?' active':''}" style="--accent:${color}" onclick="selectStation(${s.vmid})">
-        <div class="station-accent-bar" style="background:${color}"></div>
-        <div class="station-card-top">
-          <div>
-            <div class="station-name">${s.name}</div>
-            <div class="station-vmid">CT ${s.vmid}</div>
-          </div>
-          <div class="status-badges">
-            <div class="status-badge ${ctClass}"><div class="status-dot"></div>${s.container_status}</div>
-            <div class="status-badge ${rsClass}"><div class="status-dot"></div>${rsLabel}</div>
-            ${s.api_reachable ? `<div class="status-badge ${raClass}"><div class="status-dot"></div>${s.rlapi_running?'api live':'api down'}</div>` : ''}
-          </div>
-        </div>
-        <div class="station-card-body">
-          <div class="station-stats">
-            <div><div class="stat-label">detections today</div><div class="stat-value">${s.detections_today}</div></div>
-            <div><div class="stat-label">last detection</div><div class="stat-value small">${lastDet}</div></div>
-          </div>
-          <div class="sparkline">${sparks}</div>
-        </div>
-        <div class="station-card-footer">
-          <button class="btn btn-start" onclick="event.stopPropagation();stationAction(${s.vmid},'start')">▶ start</button>
-          <button class="btn btn-stop" onclick="event.stopPropagation();stationAction(${s.vmid},'stop')">■ stop</button>
-          <button class="btn" onclick="event.stopPropagation();selectStation(${s.vmid})">details →</button>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function selectStation(vmid) {
-  selectedVmid = vmid;
-  const s = stations.find(x => x.vmid === vmid);
-  document.getElementById('detail-title').textContent = s ? s.name : `CT ${vmid}`;
-  renderStations(stations);
-  const panel = document.getElementById('detail-panel');
-  panel.classList.add('visible');
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'schedule';
-  loadTabContent(activeTab, vmid);
-}
-
-async function loadTabContent(tab, vmid) {
-  if      (tab === 'schedule')   loadSchedule(vmid);
-  else if (tab === 'detections') loadDetections(vmid);
-  else if (tab === 'log')        loadLog(vmid);
-  else if (tab === 'transcript') loadTranscript(vmid);
-  else if (tab === 'keywords')   loadKeywords(vmid);
-  else if (tab === 'config')     loadStationConfig(vmid);
-  else if (tab === 'test')       loadTester(vmid);
-  else if (tab === 'archive')    loadArchive(vmid);
-}
-
-// --- schedule ---
-async function loadSchedule(vmid) {
-  const el = document.getElementById('tab-schedule');
-  el.innerHTML = '<div class="loading">loading...</div>';
-  try {
-    const data = await fetch(`${API}/api/station/${vmid}/schedule`).then(r=>r.json());
-    const slots = data.slots || [];
-    const currentHour = new Date().getHours();
-
-    if (!slots.length) {
-      el.innerHTML = '<div class="empty-state">no schedule data yet — generates after the midday or end-of-day batch runs</div>';
-      return;
-    }
-
-    const updatedLabel = data.updated_at
-      ? `last updated ${data.updated_at.split(' ')[1].slice(0,5)} (${data.summary || ''})`
-      : 'no batch run yet today';
-
-    const grid = slots.map(slot => {
-      const hasKeyword  = slot.keyword && slot.keyword !== 'unclear';
-      const isCurrent   = slot.hour === currentHour;
-      const cls = `schedule-slot${hasKeyword?' has-keyword':''}${isCurrent?' current-hour':''}`;
-      const kwCls = hasKeyword ? 'found' : 'unclear';
-      const kwText = hasKeyword ? slot.keyword.toUpperCase() : '—';
-      return `<div class="${cls}">
-        <div class="slot-hour">${slot.label}</div>
-        <div class="slot-keyword ${kwCls}">${esc(kwText)}</div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = `
-      <div class="schedule-header">
-        <div class="section-title" style="margin:0">Today's Keywords</div>
-        <div class="schedule-updated">${updatedLabel}</div>
-      </div>
-      <div class="schedule-grid">${grid}</div>`;
-  } catch {
-    el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
-  }
-}
-
-// --- detections ---
-async function loadDetections(vmid) {
-  const el = document.getElementById('tab-detections');
-  el.innerHTML = '<div class="loading">loading...</div>';
-  try {
-    const data = await fetch(`${API}/api/station/${vmid}/detections`).then(r=>r.json());
-    if (!data.length) { el.innerHTML = '<div class="empty-state">no detections today</div>'; return; }
-    el.innerHTML = `<table class="detections-table">
-      <thead><tr><th>TIME</th><th>TEXT</th></tr></thead>
-      <tbody>${[...data].reverse().map(d=>`
-        <tr>
-          <td class="detection-time">${d.timestamp.split(' ')[1].slice(0,5)}</td>
-          <td style="font-size:12px;line-height:1.5">${esc(d.text)}</td>
-        </tr>`).join('')}</tbody>
-    </table>`;
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
-}
-
-// --- log ---
-async function loadLog(vmid) {
-  const el = document.getElementById('tab-log');
-  el.innerHTML = '<div class="loading">loading...</div>';
-  try {
-    const data = await fetch(`${API}/api/station/${vmid}/log?lines=300`).then(r=>r.json());
-    el.innerHTML = `
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="copy-btn" onclick="copyText(${JSON.stringify('')}, 'log-raw', this)">copy all</button>
-      </div>
-      <div class="log-viewer" id="lv">${colorizeLog(data.log)}</div>`;
-    el.querySelector('.copy-btn').onclick = () => copyRaw(data.log, el.querySelector('.copy-btn'));
-    const lv = document.getElementById('lv');
-    lv.scrollTop = lv.scrollHeight;
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
-}
-
-// --- transcript ---
-async function loadTranscript(vmid) {
-  const el = document.getElementById('tab-transcript');
-  el.innerHTML = '<div class="loading">loading...</div>';
-  try {
-    const data = await fetch(`${API}/api/station/${vmid}/transcript?lines=150`).then(r=>r.json());
-    el.innerHTML = `
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="copy-btn">copy all</button>
-      </div>
-      <div class="log-viewer">${esc(data.transcript)}</div>`;
-    el.querySelector('.copy-btn').onclick = () => copyRaw(data.transcript, el.querySelector('.copy-btn'));
-    el.querySelector('.log-viewer').scrollTop = 999999;
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
-}
-
-// --- keywords ---
-async function loadKeywords(vmid) {
-  const el = document.getElementById('tab-keywords');
-  el.innerHTML = '<div class="loading">loading...</div>';
-  try {
-    kwData = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json());
-    renderKwEditor(el, vmid);
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
-}
-
-function renderKwEditor(el, vmid) {
-  const sections = [
-    { key: 'strict_keywords',  label: 'Strict Phrases' },
-    { key: 'shortcodes',       label: 'Shortcodes' },
-    { key: 'prize_keywords',   label: 'Prize Keywords' },
-    { key: 'exclude_keywords', label: 'Exclusions' },
-  ];
-  el.innerHTML = sections.map(sec => {
-    const items = kwData[sec.key] || [];
-    return `<div class="kw-section">
-      <div class="kw-section-label">${sec.label}</div>
-      <div class="kw-tags">${items.map((item,i)=>`
-        <div class="kw-tag"><span>${esc(item)}</span>
-          <span class="kw-tag-remove" onclick="removeKw('${sec.key}',${i})">×</span>
-        </div>`).join('')}</div>
-      <div class="kw-add-row">
-        <input class="kw-input" id="kwinput-${sec.key}" placeholder="add new..." onkeydown="if(event.key==='Enter')addKw('${sec.key}')">
-        <button class="btn" style="flex:0;white-space:nowrap" onclick="addKw('${sec.key}')">+ add</button>
-      </div>
-    </div>`;
-  }).join('') + `<button class="save-btn" onclick="saveKeywords(${vmid})">save keywords.json</button>`;
-}
-
-function removeKw(key, i) { kwData[key].splice(i,1); renderKwEditor(document.getElementById('tab-keywords'), selectedVmid); }
-function addKw(key) {
-  const inp = document.getElementById(`kwinput-${key}`);
-  const v = inp.value.trim(); if (!v) return;
-  if (!kwData[key]) kwData[key] = [];
-  kwData[key].push(v); inp.value = '';
-  renderKwEditor(document.getElementById('tab-keywords'), selectedVmid);
-}
-async function saveKeywords(vmid) {
-  try {
-    const r = await fetch(`${API}/api/station/${vmid}/keywords`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({data: kwData}) });
-    r.ok ? toast('keywords.json saved — reloads in ~60s') : toast('save failed','error');
-  } catch { toast('save failed','error'); }
-}
-
-// --- station config ---
-async function loadStationConfig(vmid) {
-  const el = document.getElementById('tab-config');
-  el.innerHTML = '<div class="loading">loading...</div>';
-  try {
-    cfgData = await fetch(`${API}/api/station/${vmid}/config`).then(r=>r.json());
-    renderCfgEditor(el, vmid);
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`; }
-}
-
-function renderCfgEditor(el, vmid) {
-  const hrs  = Array.isArray(cfgData.heartbeat_hours) ? cfgData.heartbeat_hours.join(', ') : '';
-  const recs = Array.isArray(cfgData.recipients) ? cfgData.recipients.join(', ') : '';
-  const runWeekends = cfgData.run_weekends !== false;
-
-  el.innerHTML = `
-    <div class="config-grid">
-      <div class="config-field">
-        <div class="config-label">Station Name</div>
-        <input class="config-input" id="cfg-station_name" value="${esc(cfgData.station_name||'')}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Sender Email</div>
-        <input class="config-input" id="cfg-sender_email" value="${esc(cfgData.sender_email||'')}">
-      </div>
-      <div class="config-field full">
-        <div class="config-label">Stream URL</div>
-        <input class="config-input" id="cfg-stream_url" value="${esc(cfgData.stream_url||'')}">
-      </div>
-      <div class="config-field full">
-        <div class="config-label">Recipients (comma separated)</div>
-        <input class="config-input" id="cfg-recipients" value="${esc(recs)}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Heartbeat Hours (comma separated)</div>
-        <input class="config-input" id="cfg-heartbeat_hours" value="${esc(hrs)}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Crash Alert Threshold</div>
-        <input class="config-input" type="number" id="cfg-crash_alert_threshold" value="${cfgData.crash_alert_threshold||3}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Instant Alerts</div>
-        <div class="config-toggle">
-          <label class="toggle">
-            <input type="checkbox" id="cfg-instant_alerts" ${cfgData.instant_alerts?'checked':''}>
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-          </label>
-          <span id="instant-label" style="font-size:12px;color:var(--muted)">${cfgData.instant_alerts?'on':'off'}</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="config-section">Contest Hours</div>
-    <div class="config-grid">
-      <div class="config-field">
-        <div class="config-label">Weekday Start (24h)</div>
-        <input class="config-input" type="number" id="cfg-weekday_start" min="0" max="23" value="${cfgData.weekday_start??6}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Weekday End (24h)</div>
-        <input class="config-input" type="number" id="cfg-weekday_end" min="0" max="23" value="${cfgData.weekday_end??20}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Midday Summary Hour (24h)</div>
-        <input class="config-input" type="number" id="cfg-midday_hour" min="0" max="23" value="${cfgData.midday_hour??13}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Run Weekends</div>
-        <div class="config-toggle">
-          <label class="toggle">
-            <input type="checkbox" id="cfg-run_weekends" ${runWeekends?'checked':''}>
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-          </label>
-          <span id="weekends-label" style="font-size:12px;color:var(--muted)">${runWeekends?'yes':'no'}</span>
-        </div>
-      </div>
-      <div class="config-field">
-        <div class="config-label">Weekend Start (24h)</div>
-        <input class="config-input" type="number" id="cfg-weekend_start" min="0" max="23" value="${cfgData.weekend_start??13}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Weekend End (24h)</div>
-        <input class="config-input" type="number" id="cfg-weekend_end" min="0" max="23" value="${cfgData.weekend_end??18}">
-      </div>
-    </div>
-
-
-    <div class="config-section">Whisper Settings</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">model_size requires a service restart. All other settings apply on next restart.</div>
-    <div class="config-grid">
-      <div class="config-field">
-        <div class="config-label">Model Size</div>
-        <select class="config-input" id="cfg-model_size">
-          ${['tiny','base','small','medium'].map(m=>`<option value="${m}" ${(cfgData.model_size||'small')===m?'selected':''}>${m}</option>`).join('')}
-        </select>
-      </div>
-      <div class="config-field">
-        <div class="config-label">Beam Size (1=fast 5=accurate)</div>
-        <input class="config-input" type="number" id="cfg-whisper_beam_size" min="1" max="5" value="${cfgData.whisper_beam_size??1}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">VAD Threshold (0.0 to 1.0)</div>
-        <input class="config-input" type="number" id="cfg-vad_threshold" min="0" max="1" step="0.05" value="${cfgData.vad_threshold??0.3}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Temperature (0.0=deterministic)</div>
-        <input class="config-input" type="number" id="cfg-whisper_temperature" min="0" max="1" step="0.1" value="${cfgData.whisper_temperature??0.0}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Min Speech Duration (ms)</div>
-        <input class="config-input" type="number" id="cfg-vad_min_speech_ms" min="100" max="2000" step="100" value="${cfgData.vad_min_speech_ms??500}">
-      </div>
-      <div class="config-field">
-        <div class="config-label">Min Silence Duration (ms)</div>
-        <input class="config-input" type="number" id="cfg-vad_min_silence_ms" min="100" max="2000" step="100" value="${cfgData.vad_min_silence_ms??500}">
-      </div>
-    </div>
-    <button class="save-btn" onclick="saveStationConfig(${vmid})" style="margin-top:20px">save config.json</button>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted)">note: passwords and API keys are not shown or modified here — restart radioscout after saving for changes to take effect</div>`;
-
-  document.getElementById('cfg-instant_alerts').addEventListener('change', e => {
-    document.getElementById('instant-label').textContent = e.target.checked ? 'on' : 'off';
-  });
-  document.getElementById('cfg-run_weekends').addEventListener('change', e => {
-    document.getElementById('weekends-label').textContent = e.target.checked ? 'yes' : 'no';
-  });
-}
-
-async function saveStationConfig(vmid) {
-  const hrs  = document.getElementById('cfg-heartbeat_hours').value.split(',').map(x=>parseInt(x.trim())).filter(n=>!isNaN(n));
-  const recs = document.getElementById('cfg-recipients').value.split(',').map(x=>x.trim()).filter(Boolean);
-  const payload = {
-    station_name:           document.getElementById('cfg-station_name').value.trim(),
-    sender_email:           document.getElementById('cfg-sender_email').value.trim(),
-    stream_url:             document.getElementById('cfg-stream_url').value.trim(),
-    recipients:             recs,
-    heartbeat_hours:        hrs,
-    crash_alert_threshold:  parseInt(document.getElementById('cfg-crash_alert_threshold').value),
-    instant_alerts:         document.getElementById('cfg-instant_alerts').checked,
-    weekday_start:          parseInt(document.getElementById('cfg-weekday_start').value),
-    weekday_end:            parseInt(document.getElementById('cfg-weekday_end').value),
-    weekend_start:          parseInt(document.getElementById('cfg-weekend_start').value),
-    weekend_end:            parseInt(document.getElementById('cfg-weekend_end').value),
-    run_weekends:           document.getElementById('cfg-run_weekends').checked,
-    midday_hour:            parseInt(document.getElementById('cfg-midday_hour').value),
-    model_size:             document.getElementById('cfg-model_size').value,
-    whisper_beam_size:      parseInt(document.getElementById('cfg-whisper_beam_size').value),
-    vad_threshold:          parseFloat(document.getElementById('cfg-vad_threshold').value),
-    whisper_temperature:    parseFloat(document.getElementById('cfg-whisper_temperature').value),
-    vad_min_speech_ms:      parseInt(document.getElementById('cfg-vad_min_speech_ms').value),
-    vad_min_silence_ms:     parseInt(document.getElementById('cfg-vad_min_silence_ms').value),
-  };
-  try {
-    const r = await fetch(`${API}/api/station/${vmid}/config`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({data: payload}) });
-    r.ok ? toast('config.json saved — restart radioscout for changes to take effect') : toast('save failed','error');
-  } catch { toast('save failed','error'); }
-}
-
-// --- tester ---
-async function loadTester(vmid) {
-  const el = document.getElementById('tab-test');
-  if (!kwData) {
-    try { kwData = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json()); } catch { kwData = {}; }
-  }
-  el.innerHTML = `
-    <div class="test-layout">
-      <div>
-        <div class="section-title">paste transcript snippet</div>
-        <textarea class="test-textarea" id="test-input" placeholder="Paste a raw transcript chunk here..."></textarea>
-        <button class="test-btn" onclick="runTest(${vmid})">▶ run detection test</button>
-      </div>
-      <div>
-        <div class="section-title">result</div>
-        <div class="test-results" id="test-results"><div style="color:var(--muted);font-size:12px">paste a snippet and hit run</div></div>
-      </div>
-    </div>`;
-}
-
-async function runTest(vmid) {
-  const text = document.getElementById('test-input').value.trim();
-  if (!text) { toast('paste some text first','error'); return; }
-  if (!kwData) { try { kwData = await fetch(`${API}/api/station/${vmid}/keywords`).then(r=>r.json()); } catch { kwData = {}; } }
-  const resultsEl = document.getElementById('test-results');
-  resultsEl.innerHTML = '<div style="color:var(--muted);font-size:12px">running...</div>';
-  try {
-    const r = await fetch(`${API}/api/station/${vmid}/test`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text, keywords: kwData })
-    });
-    const data = await r.json();
-    const vClass = data.detected ? 'detected' : (data.verdict==='EXCLUDED'?'excluded':'nomatch');
-    const vIcon  = data.detected ? '✓' : (data.verdict==='EXCLUDED'?'⊘':'✗');
-    const rules  = (data.results||[]).map(rule => {
-      const icon = rule.fired
-        ? (rule.verdict==='MATCH'?`<span style="color:var(--green)">✓</span>`:`<span style="color:var(--red)">⊘</span>`)
-        : `<span style="color:var(--muted)">–</span>`;
-      return `<div class="test-rule">
-        <div class="test-rule-icon">${icon}</div>
-        <div>
-          <div class="test-rule-name">${esc(rule.rule)}</div>
-          ${rule.match?`<div class="test-rule-match">${esc(rule.match)}</div>`:''}
-          ${rule.verdict&&rule.verdict!=='MATCH'?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(rule.verdict)}</div>`:''}
-        </div>
-      </div>`;
-    }).join('');
-    resultsEl.innerHTML = `
-      <div class="test-verdict ${vClass}">${vIcon} ${data.verdict}</div>
-      <div class="test-reason">${esc(data.reason)}</div>
-      ${rules}`;
-  } catch(e) {
-    resultsEl.innerHTML = `<div style="color:var(--red);font-size:12px">test failed</div>`;
-  }
-}
-
-// --- dashboard config modal ---
-async function openDashboardConfig() {
-  try {
-    dcData = await fetch(`${API}/api/dashboard/config`).then(r=>r.json());
-    renderDcEditor();
-    document.getElementById('dc-overlay').style.display = 'block';
-    document.getElementById('dc-modal').style.display = 'block';
-  } catch { toast('failed to load','error'); }
-}
-
-function closeDashboardConfig() {
-  document.getElementById('dc-overlay').style.display = 'none';
-  document.getElementById('dc-modal').style.display = 'none';
-}
-
-function renderDcEditor() {
-  const stations = dcData.stations || [];
-  document.getElementById('dc-editor').innerHTML = `
-    <div style="margin-bottom:14px">
-      ${stations.map((s,i) => `
-        <div class="dc-station">
-          <div class="dc-station-header">
-            <div class="dc-station-title" style="color:${s.color||'#fff'}">${esc(s.name)}</div>
-            <button class="dc-remove-btn" onclick="dcRemoveStation(${i})">×</button>
-          </div>
-          <div class="dc-grid">
-            <div class="config-field">
-              <div class="config-label">Name</div>
-              <input class="config-input" value="${esc(s.name)}" oninput="dcData.stations[${i}].name=this.value">
-            </div>
-            <div class="config-field">
-              <div class="config-label">VMID</div>
-              <input class="config-input" type="number" value="${s.vmid}" oninput="dcData.stations[${i}].vmid=parseInt(this.value)">
-            </div>
-            <div class="config-field" style="grid-column:1/-1">
-              <div class="config-label">API URL</div>
-              <input class="config-input" value="${esc(s.api_url)}" oninput="dcData.stations[${i}].api_url=this.value">
-            </div>
-            <div class="config-field">
-              <div class="config-label">Accent Color</div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <input type="color" value="${s.color||'#ffffff'}" oninput="dcData.stations[${i}].color=this.value" style="background:none;border:1px solid var(--border);border-radius:4px;width:40px;height:32px;cursor:pointer;padding:2px">
-                <input class="config-input" value="${esc(s.color||'#ffffff')}" oninput="dcData.stations[${i}].color=this.value" style="flex:1">
-              </div>
-            </div>
-          </div>
-        </div>`).join('')}
-    </div>
-    <button class="dc-add-btn" onclick="dcAddStation()">+ add station</button>`;
-}
-
-function dcRemoveStation(i) { dcData.stations.splice(i,1); renderDcEditor(); }
-function dcAddStation() { dcData.stations.push({name:'New Station',vmid:100,api_url:'http://0.0.0.0:5001',color:'#4d9de0'}); renderDcEditor(); }
-
-async function saveDashboardConfig() {
-  try {
-    const r = await fetch(`${API}/api/dashboard/config`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({data: dcData}) });
-    if (r.ok) { toast('saved'); closeDashboardConfig(); setTimeout(loadAll, 500); }
-    else toast('save failed','error');
-  } catch { toast('save failed','error'); }
-}
-
-// --- start/stop ---
-async function stationAction(vmid, action) {
-  try {
-    const r = await fetch(`${API}/api/station/${vmid}/${action}`, {method:'POST'});
-    r.ok ? (toast(`${action} sent`), setTimeout(loadAll, 2000)) : toast(`${action} failed`,'error');
-  } catch { toast(`${action} failed`,'error'); }
-}
-
-// --- copy ---
-function copyRaw(text, btn) {
-  function onSuccess() {
-    if (btn) {
-      btn.textContent = 'copied!';
-      btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'copy all'; btn.classList.remove('copied'); }, 2000);
-    }
-  }
-
-  // try modern clipboard API first
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, btn));
-  } else {
-    fallbackCopy(text, btn);
-  }
-}
-
-function fallbackCopy(text, btn) {
-  // fallback for http (non-secure) contexts like local IP access
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  try {
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    if (ok) {
-      if (btn) {
-        btn.textContent = 'copied!';
-        btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'copy all'; btn.classList.remove('copied'); }, 2000);
-      }
-    } else {
-      toast('copy failed — try Ctrl+A then Ctrl+C in the viewer', 'error');
-    }
-  } catch {
-    document.body.removeChild(ta);
-    toast('copy failed — try Ctrl+A then Ctrl+C in the viewer', 'error');
-  }
-}
-
-// --- archive ---
-let archiveSelectedDate = null;
-let archiveSubtab = 'transcript';
-
-async function loadArchive(vmid) {
-  const el = document.getElementById('tab-archive');
-  el.innerHTML = '<div class="loading">loading archive dates...</div>';
-  try {
-    const dates = await fetch(`${API}/api/station/${vmid}/archive/list`).then(r=>r.json());
-    if (!dates.length) {
-      el.innerHTML = '<div class="empty-state">no archived days yet — archive runs at midnight each day</div>';
-      return;
-    }
-
-    el.innerHTML = `
-      <div class="archive-layout">
-        <div class="archive-dates" id="archive-date-list">
-          ${dates.map(d => `<div class="archive-date-item${d===archiveSelectedDate?' active':''}" onclick="selectArchiveDate(${vmid},'${d}')">${d}</div>`).join('')}
-        </div>
-        <div class="archive-content" id="archive-content">
-          <div style="color:var(--muted);font-size:12px;padding:20px 0">select a date</div>
-        </div>
-      </div>`;
-
-    if (archiveSelectedDate && dates.includes(archiveSelectedDate)) {
-      selectArchiveDate(vmid, archiveSelectedDate);
-    } else if (dates.length) {
-      selectArchiveDate(vmid, dates[0]);
-    }
-  } catch { el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load archive</div>`; }
-}
-
-async function selectArchiveDate(vmid, date) {
-  archiveSelectedDate = date;
-  document.querySelectorAll('.archive-date-item').forEach(el => {
-    el.classList.toggle('active', el.textContent === date);
-  });
-  renderArchiveContent(vmid, date, archiveSubtab);
-}
-
-async function renderArchiveContent(vmid, date, subtab) {
-  archiveSubtab = subtab;
-  const content = document.getElementById('archive-content');
-  if (!content) return;
-
-  const subtabs = ['transcript', 'log', 'detections', 'schedule'];
-  const subtabHtml = subtabs.map(s =>
-    `<button class="archive-subtab${s===subtab?' active':''}" onclick="renderArchiveContent(${vmid},'${date}','${s}')">${s}</button>`
-  ).join('');
-
-  content.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <div class="archive-subtabs">${subtabHtml}</div>
-      <button class="copy-btn" id="archive-copy-btn">copy all</button>
-    </div>
-    <div id="archive-body"><div class="loading">loading...</div></div>`;
-
-  try {
-    if (subtab === 'transcript') {
-      const data = await fetch(`${API}/api/station/${vmid}/archive/${date}/transcript`).then(r=>r.json());
-      document.getElementById('archive-body').innerHTML = `<div class="log-viewer">${esc(data.transcript)}</div>`;
-      document.getElementById('archive-copy-btn').onclick = () => copyRaw(data.transcript, document.getElementById('archive-copy-btn'));
-      document.getElementById('archive-body').querySelector('.log-viewer').scrollTop = 999999;
-
-    } else if (subtab === 'log') {
-      const data = await fetch(`${API}/api/station/${vmid}/archive/${date}/log`).then(r=>r.json());
-      document.getElementById('archive-body').innerHTML = `<div class="log-viewer">${colorizeLog(data.log)}</div>`;
-      document.getElementById('archive-copy-btn').onclick = () => copyRaw(data.log, document.getElementById('archive-copy-btn'));
-      const lv = document.getElementById('archive-body').querySelector('.log-viewer');
-      lv.scrollTop = lv.scrollHeight;
-
-    } else if (subtab === 'detections') {
-      const data = await fetch(`${API}/api/station/${vmid}/archive/${date}/detections`).then(r=>r.json());
-      document.getElementById('archive-copy-btn').onclick = () => copyRaw(JSON.stringify(data, null, 2), document.getElementById('archive-copy-btn'));
-      if (!data.length) {
-        document.getElementById('archive-body').innerHTML = '<div class="empty-state">no detections for this day</div>';
-        return;
-      }
-      document.getElementById('archive-body').innerHTML = `
-        <table class="detections-table">
-          <thead><tr><th>TIME</th><th>TEXT</th></tr></thead>
-          <tbody>${data.map(d=>`
-            <tr>
-              <td class="detection-time">${d.timestamp.split(' ')[1].slice(0,5)}</td>
-              <td style="font-size:12px;line-height:1.5">${esc(d.text)}</td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-
-    } else if (subtab === 'schedule') {
-      const data = await fetch(`${API}/api/station/${vmid}/archive/${date}/schedule`).then(r=>r.json());
-      document.getElementById('archive-copy-btn').onclick = () => copyRaw(JSON.stringify(data, null, 2), document.getElementById('archive-copy-btn'));
-      const slots = data.slots || [];
-      if (!slots.length) {
-        document.getElementById('archive-body').innerHTML = '<div class="empty-state">no schedule data for this day</div>';
-        return;
-      }
-      const grid = slots.map(slot => {
-        const hasKw = slot.keyword && slot.keyword !== 'unclear';
-        return `<div class="schedule-slot${hasKw?' has-keyword':''}">
-          <div class="slot-hour">${slot.label}</div>
-          <div class="slot-keyword ${hasKw?'found':'unclear'}">${hasKw?slot.keyword.toUpperCase():'—'}</div>
-        </div>`;
-      }).join('');
-      document.getElementById('archive-body').innerHTML = `<div class="schedule-grid">${grid}</div>`;
-    }
-  } catch {
-    document.getElementById('archive-body').innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
-  }
-}
-
-// --- helpers ---
-function colorizeLog(raw) {
-  return esc(raw).split('\n').map(line => {
-    if (line.includes('KEYWORD DETECTED')||line.includes('[!]')) return `<span class="log-line-detect">${line}</span>`;
-    if (line.includes('STRICT MATCH')||line.includes('SPELLING MATCH')||line.includes('SHORTCODE MATCH')) return `<span class="log-line-match">${line}</span>`;
-    if (line.includes('[EXCLUDED]')||line.includes('[HALLUCINATION]')) return `<span class="log-line-excl">${line}</span>`;
-    if (line.includes('crash')||line.includes('stall')||line.includes('Error')) return `<span class="log-line-crash">${line}</span>`;
-    if (line.includes('[BATCH]')||line.includes('HEARTBEAT')||line.includes('SCHEDULER')) return `<span class="log-line-batch">${line}</span>`;
-    return `<span style="color:#505065">${line}</span>`;
-  }).join('\n');
-}
-
-function esc(str) {
-  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-loadAll();
-setInterval(loadAll, 30000);
-</script>
-</body>
-</html>
+"""
+Radio Listener Dashboard — FastAPI backend
+Runs on the Proxmox host. Talks to the rlapi service running inside each container.
+
+Run with: uvicorn dashboard:app --host 0.0.0.0 --port 5000
+Or let systemd handle it via rldashboard.service.
+"""
+
+import json
+import os
+import subprocess
+import time
+from datetime import datetime
+
+import httpx
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+app = FastAPI(title="Radio Listener Dashboard")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+DASHBOARD_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "dashboard_config.json")
+API_TIMEOUT = 5
+
+
+def load_config():
+    if not os.path.exists(DASHBOARD_CONFIG_PATH):
+        default = {"stations": []}
+        with open(DASHBOARD_CONFIG_PATH, "w") as f:
+            json.dump(default, f, indent=2)
+        return default
+    with open(DASHBOARD_CONFIG_PATH, "r") as f:
+        return json.load(f)
+
+
+def save_config(data):
+    with open(DASHBOARD_CONFIG_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def get_container_status(vmid):
+    try:
+        result = subprocess.run(
+            ["pct", "status", str(vmid)],
+            capture_output=True, text=True, timeout=5
+        )
+        out = result.stdout.strip().lower()
+        if "running" in out:
+            return "running"
+        elif "stopped" in out:
+            return "stopped"
+        return "unknown"
+    except Exception:
+        return "unknown"
+
+
+async def api_get(url, path, **kwargs):
+    try:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            r = await client.get(f"{url}{path}", **kwargs)
+            r.raise_for_status()
+            return r.json()
+    except Exception:
+        return None
+
+
+async def api_post(url, path, json_body):
+    try:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            r = await client.post(f"{url}{path}", json=json_body)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def find_station(vmid):
+    config = load_config()
+    s = next((x for x in config["stations"] if x["vmid"] == vmid), None)
+    if not s:
+        raise HTTPException(status_code=404, detail="Station not found")
+    return s
+
+
+# --- stations ---
+
+@app.get("/api/stations")
+async def get_stations():
+    config = load_config()
+    stations = []
+
+    for s in config["stations"]:
+        vmid    = s["vmid"]
+        api_url = s["api_url"]
+
+        ct_status   = get_container_status(vmid)
+        status_data = await api_get(api_url, "/status")
+        detections  = await api_get(api_url, "/detections") or []
+
+        hour_counts = {}
+        for d in detections:
+            try:
+                h = datetime.strptime(d["timestamp"], "%Y-%m-%d %H:%M:%S").hour
+                hour_counts[h] = hour_counts.get(h, 0) + 1
+            except Exception:
+                pass
+
+        stations.append({
+            "name":               s["name"],
+            "vmid":               vmid,
+            "color":              s.get("color", "#ffffff"),
+            "api_url":            api_url,
+            "container_status":   ct_status,
+            "api_reachable":      status_data is not None,
+            "radioscout_running": status_data.get("radioscout_running", False) if status_data else False,
+            "rlapi_running":      status_data.get("rlapi_running", True) if status_data else False,
+            "detections_today":   status_data.get("detections_today", 0) if status_data else 0,
+            "last_detection":     status_data.get("last_detection") if status_data else None,
+            "hour_counts":        hour_counts,
+        })
+
+    return stations
+
+
+@app.get("/api/station/{vmid}/detections")
+async def get_detections(vmid: int):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/detections") or []
+
+
+@app.get("/api/station/{vmid}/log")
+async def get_log(vmid: int, lines: int = 300):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/log", params={"lines": lines}) or {"log": ""}
+
+
+@app.get("/api/station/{vmid}/transcript")
+async def get_transcript(vmid: int, lines: int = 150):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/transcript", params={"lines": lines}) or {"transcript": ""}
+
+
+@app.get("/api/station/{vmid}/keywords")
+async def get_keywords(vmid: int):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], "/keywords")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Could not reach container API")
+    return data
+
+
+class KeywordsUpdate(BaseModel):
+    data: dict
+
+
+@app.post("/api/station/{vmid}/keywords")
+async def update_keywords(vmid: int, body: KeywordsUpdate):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/keywords", {"data": body.data})
+
+
+@app.get("/api/station/{vmid}/config")
+async def get_station_config(vmid: int):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], "/config")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Could not reach container API")
+    return data
+
+
+class StationConfigUpdate(BaseModel):
+    data: dict
+
+
+@app.post("/api/station/{vmid}/config")
+async def update_station_config(vmid: int, body: StationConfigUpdate):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/config", {"data": body.data})
+
+
+@app.get("/api/station/{vmid}/schedule")
+async def get_schedule(vmid: int):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], "/schedule")
+    return data or {"slots": [], "updated_at": None, "summary": None}
+
+
+class TestPayload(BaseModel):
+    text: str
+    keywords: dict
+
+
+@app.post("/api/station/{vmid}/test")
+async def test_keywords(vmid: int, body: TestPayload):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/test", {"text": body.text, "keywords": body.keywords})
+
+
+# --- dashboard config ---
+
+@app.get("/api/dashboard/config")
+def get_dashboard_config():
+    return load_config()
+
+
+class DashboardConfigUpdate(BaseModel):
+    data: dict
+
+
+@app.post("/api/dashboard/config")
+def update_dashboard_config(body: DashboardConfigUpdate):
+    try:
+        save_config(body.data)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- start / stop ---
+
+@app.post("/api/station/{vmid}/start")
+def start_station(vmid: int):
+    try:
+        subprocess.run(["pct", "start", str(vmid)], timeout=15, check=True)
+        time.sleep(2)
+        subprocess.run(["pct", "exec", str(vmid), "--", "systemctl", "start", "radioscout.service"], timeout=10)
+        subprocess.run(["pct", "exec", str(vmid), "--", "systemctl", "start", "rlapi.service"], timeout=10)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/station/{vmid}/stop")
+def stop_station(vmid: int):
+    try:
+        subprocess.run(["pct", "exec", str(vmid), "--", "systemctl", "stop", "radioscout.service"], timeout=10)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/station/{vmid}/restart-service")
+def restart_service(vmid: int):
+    try:
+        subprocess.run(["pct", "exec", str(vmid), "--", "systemctl", "restart", "radioscout.service"], timeout=10)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# --- archive ---
+
+@app.get("/api/station/{vmid}/archive/list")
+async def get_archive_list(vmid: int):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/archive/list") or []
+
+
+@app.get("/api/station/{vmid}/archive/{date}/transcript")
+async def get_archive_transcript(vmid: int, date: str):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], f"/archive/{date}/transcript")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
+
+@app.get("/api/station/{vmid}/archive/{date}/log")
+async def get_archive_log(vmid: int, date: str):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], f"/archive/{date}/log")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
+
+@app.get("/api/station/{vmid}/archive/{date}/detections")
+async def get_archive_detections(vmid: int, date: str):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], f"/archive/{date}/detections") or []
+
+
+@app.get("/api/station/{vmid}/archive/{date}/schedule")
+async def get_archive_schedule(vmid: int, date: str):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], f"/archive/{date}/schedule")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
+# serve frontend
+FRONTEND_PATH = os.path.join(os.path.dirname(__file__), "dashboard_frontend")
+if os.path.exists(FRONTEND_PATH):
+    app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
