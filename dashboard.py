@@ -229,7 +229,14 @@ def update_dashboard_config(body: DashboardConfigUpdate):
 @app.post("/api/station/{vmid}/start")
 def start_station(vmid: int):
     try:
-        subprocess.run(["pct", "start", str(vmid)], timeout=15, check=True)
+        # try to start the container — ignore error if it's already running
+        result = subprocess.run(
+            ["pct", "start", str(vmid)],
+            timeout=15, capture_output=True, text=True
+        )
+        if result.returncode != 0 and "already running" not in result.stderr.lower():
+            # only raise if it's not an "already running" error
+            raise Exception(result.stderr.strip())
         time.sleep(2)
         subprocess.run(["pct", "exec", str(vmid), "--", "systemctl", "start", "radioscout.service"], timeout=10)
         subprocess.run(["pct", "exec", str(vmid), "--", "systemctl", "start", "rlapi.service"], timeout=10)
