@@ -256,6 +256,47 @@ def restart_service(vmid: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# --- archive ---
+
+@app.get("/api/station/{vmid}/archive/list")
+async def get_archive_list(vmid: int):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/archive/list") or []
+
+
+@app.get("/api/station/{vmid}/archive/{date}/transcript")
+async def get_archive_transcript(vmid: int, date: str):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], f"/archive/{date}/transcript")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
+
+@app.get("/api/station/{vmid}/archive/{date}/log")
+async def get_archive_log(vmid: int, date: str):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], f"/archive/{date}/log")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
+
+@app.get("/api/station/{vmid}/archive/{date}/detections")
+async def get_archive_detections(vmid: int, date: str):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], f"/archive/{date}/detections") or []
+
+
+@app.get("/api/station/{vmid}/archive/{date}/schedule")
+async def get_archive_schedule(vmid: int, date: str):
+    s = find_station(vmid)
+    data = await api_get(s["api_url"], f"/archive/{date}/schedule")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
 # serve frontend
 FRONTEND_PATH = os.path.join(os.path.dirname(__file__), "dashboard_frontend")
 if os.path.exists(FRONTEND_PATH):
