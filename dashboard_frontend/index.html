@@ -425,7 +425,7 @@ async function loadLog(vmid) {
   const prevScroll = isReload ? el.querySelector('.log-viewer')?.scrollTop : null;
   if (!isReload) el.innerHTML = '<div class="loading">loading...</div>';
   try {
-    const data = await fetch(`${API}/api/station/${vmid}/log?lines=300`).then(r=>r.json());
+    const data = await fetch(`${API}/api/station/${vmid}/log?lines=2000`).then(r=>r.json());
     el.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
         <button class="copy-btn">copy all</button>
@@ -449,7 +449,7 @@ async function loadTranscript(vmid) {
   const prevScroll = isReload ? el.querySelector('.log-viewer')?.scrollTop : null;
   if (!isReload) el.innerHTML = '<div class="loading">loading...</div>';
   try {
-    const data = await fetch(`${API}/api/station/${vmid}/transcript?lines=150`).then(r=>r.json());
+    const data = await fetch(`${API}/api/station/${vmid}/transcript?lines=2000`).then(r=>r.json());
     el.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
         <button class="copy-btn">copy all</button>
