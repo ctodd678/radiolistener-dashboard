@@ -1072,7 +1072,7 @@ async function runVirginSubmit(vmid) {
     if (!res.ok) {
       const text = await res.text();
       out.innerHTML = `<span class="line-fail">HTTP ${res.status}: ${esc(text)}</span>`;
-      showToast(`Error ${res.status} — is api.py deployed on CT ${vmid}?`, 'error');
+      toast(`Error ${res.status} — is api.py deployed on CT ${vmid}?`, 'error');
       return;
     }
     const data = await res.json();
@@ -1085,7 +1085,7 @@ async function runVirginSubmit(vmid) {
       return esc(line);
     }).join('\n');
 
-    showToast(data.ok ? 'Keyword submitted!' : 'Submission may have failed — check output', data.ok ? 'success' : 'error');
+    toast(data.ok ? 'Keyword submitted!' : 'Submission may have failed — check output', data.ok ? 'success' : 'error');
 
     // refresh submitted chips
     try {
@@ -1099,7 +1099,7 @@ async function runVirginSubmit(vmid) {
 
   } catch (err) {
     out.innerHTML = `<span class="line-fail">Error: ${esc(err.message)}</span>`;
-    showToast('Request failed', 'error');
+    toast('Request failed', 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '▶ Submit';
