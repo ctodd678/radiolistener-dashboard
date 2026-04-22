@@ -168,6 +168,21 @@
   .loading { color: var(--muted); font-size: 12px; padding: 20px; text-align: center; }
   .section-title { font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 14px; }
 
+  /* contest panel */
+  .contest-panel { display: flex; flex-direction: column; gap: 16px; }
+  .contest-submit-row { display: flex; gap: 10px; align-items: flex-end; }
+  .contest-kw-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; flex: 1; }
+  .contest-kw-input:focus { outline: none; border-color: #4d9de0; }
+  .btn-contest { padding: 7px 16px; border-radius: 4px; border: 1px solid #4d9de0; background: none; color: #4d9de0; font-family: var(--font-mono); font-size: 12px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .btn-contest:hover:not(:disabled) { background: rgba(77,157,224,.1); }
+  .btn-contest:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-contest.running { color: var(--muted); border-color: var(--border); }
+  .contest-output { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 12px; font-size: 11px; white-space: pre-wrap; line-height: 1.6; min-height: 80px; max-height: 300px; overflow-y: auto; color: var(--muted); }
+  .contest-output .line-success { color: var(--green); }
+  .contest-output .line-fail    { color: var(--red); }
+  .contest-submitted { display: flex; flex-wrap: wrap; gap: 6px; }
+  .contest-kw-chip { background: rgba(77,157,224,.1); border: 1px solid rgba(77,157,224,.3); color: #4d9de0; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-family: var(--font-mono); }
+
   /* copy button */
   .copy-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all .15s; }
   .copy-btn:hover { border-color: var(--text); color: var(--text); }
@@ -216,6 +231,7 @@
       <div class="tab" data-tab="config">Station Config</div>
       <div class="tab" data-tab="test">Keyword Tester</div>
       <div class="tab" data-tab="archive">Archive</div>
+      <div class="tab tab-virgin" data-tab="contest" style="display:none">Contest</div>
     </div>
     <div class="tab-content active" id="tab-schedule"></div>
     <div class="tab-content" id="tab-detections"></div>
@@ -225,6 +241,7 @@
     <div class="tab-content" id="tab-config"></div>
     <div class="tab-content" id="tab-test"></div>
     <div class="tab-content" id="tab-archive"></div>
+    <div class="tab-content" id="tab-contest"></div>
   </div>
 </main>
 
@@ -336,15 +353,30 @@ function renderStations(stations) {
   }).join('');
 }
 
+// vmids that have the virgin contest submitter
+const VIRGIN_VMIDS = [106];
+
 function selectStation(vmid) {
   selectedVmid = vmid;
   const s = stations.find(x => x.vmid === vmid);
   document.getElementById('detail-title').textContent = s ? s.name : `CT ${vmid}`;
   renderStations(stations);
+
+  // show Contest tab only for Virgin Radio
+  document.querySelectorAll('.tab-virgin').forEach(t => {
+    t.style.display = VIRGIN_VMIDS.includes(vmid) ? '' : 'none';
+  });
+
   const panel = document.getElementById('detail-panel');
   panel.classList.add('visible');
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const activeTab = document.querySelector('.tab.active')?.dataset.tab || 'schedule';
+
+  // if Contest tab was active but we switched to a non-virgin station, fall back
+  let activeTab = document.querySelector('.tab.active')?.dataset.tab || 'schedule';
+  if (activeTab === 'contest' && !VIRGIN_VMIDS.includes(vmid)) {
+    activeTab = 'schedule';
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'schedule'));
+  }
   loadTabContent(activeTab, vmid);
 }
 
@@ -357,6 +389,7 @@ async function loadTabContent(tab, vmid) {
   else if (tab === 'config')     loadStationConfig(vmid);
   else if (tab === 'test')       loadTester(vmid);
   else if (tab === 'archive')    loadArchive(vmid);
+  else if (tab === 'contest')    loadContest(vmid);
 }
 
 // --- schedule ---
@@ -951,6 +984,119 @@ async function renderArchiveContent(vmid, date, subtab) {
     }
   } catch {
     document.getElementById('archive-body').innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
+  }
+}
+
+// --- contest submitter ---
+async function loadContest(vmid) {
+  const el = document.getElementById('tab-contest');
+  el.innerHTML = '<div class="loading">loading...</div>';
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // load submission status + archive dates in parallel
+  const [status, archiveDates] = await Promise.all([
+    fetch(`${API}/api/station/${vmid}/virgin/status`).then(r => r.json()).catch(() => ({})),
+    fetch(`${API}/api/station/${vmid}/archive/list`).then(r => r.json()).catch(() => []),
+  ]);
+
+  const submitted = status.submitted_today || [];
+
+  // build date options: today first, then archive dates that have a keyword_schedule
+  const dateOptions = [today, ...archiveDates.filter(d => d !== today)]
+    .map(d => `<option value="${d}">${d === today ? `${d} (today)` : d}</option>`)
+    .join('');
+
+  el.innerHTML = `
+    <div class="contest-panel">
+      <div class="section-title">Virgin Radio 5K A Day — Keyword Submitter</div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Schedule date</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <select class="contest-kw-input" id="contest-date" style="flex:0 0 auto;width:220px">
+            ${dateOptions}
+          </select>
+          <span style="font-size:11px;color:var(--muted)">reads <code>keyword_schedule.json</code> for that date</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Submit a specific keyword <span style="color:var(--muted);font-weight:400">(optional — overrides schedule)</span></div>
+        <div class="contest-submit-row">
+          <input class="contest-kw-input" id="contest-kw-input" placeholder="e.g. Coffee — leave blank to use schedule" />
+          <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;white-space:nowrap">
+            <input type="checkbox" id="contest-force"> force re-submit
+          </label>
+          <button class="btn-contest" id="contest-submit-btn" onclick="runVirginSubmit(${vmid})">
+            ▶ Submit
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Output</div>
+        <div class="contest-output" id="contest-output">${submitted.length ? 'Ready.' : 'No submissions yet today.'}</div>
+      </div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Submitted today</div>
+        <div class="contest-submitted" id="contest-submitted">
+          ${submitted.length
+            ? submitted.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')
+            : '<span style="color:var(--muted);font-size:11px">none yet</span>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function runVirginSubmit(vmid) {
+  const btn   = document.getElementById('contest-submit-btn');
+  const input = document.getElementById('contest-kw-input');
+  const force = document.getElementById('contest-force').checked;
+  const out   = document.getElementById('contest-output');
+
+  const keyword = input.value.trim() || null;
+  const date    = document.getElementById('contest-date')?.value || null;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ running...';
+  out.textContent = 'Starting submitter (may take ~30s)...\n';
+
+  try {
+    const res = await fetch(`${API}/api/station/${vmid}/virgin/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword, force, date }),
+    });
+    const data = await res.json();
+
+    // colorize output lines
+    out.innerHTML = data.output.split('\n').map(line => {
+      if (line.includes('SUCCESS'))  return `<span class="line-success">${esc(line)}</span>`;
+      if (line.includes('Failed') || line.includes('error') || line.includes('fail'))
+        return `<span class="line-fail">${esc(line)}</span>`;
+      return esc(line);
+    }).join('\n');
+
+    showToast(data.ok ? 'Keyword submitted!' : 'Submission may have failed — check output', data.ok ? 'success' : 'error');
+
+    // refresh submitted chips
+    try {
+      const status = await fetch(`${API}/api/station/${vmid}/virgin/status`).then(r => r.json());
+      const chips  = document.getElementById('contest-submitted');
+      const submitted = status.submitted_today || [];
+      chips.innerHTML = submitted.length
+        ? submitted.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')
+        : '<span style="color:var(--muted);font-size:11px">none yet</span>';
+    } catch (_) {}
+
+  } catch (err) {
+    out.innerHTML = `<span class="line-fail">Error: ${esc(err.message)}</span>`;
+    showToast('Request failed', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Submit';
   }
 }
 

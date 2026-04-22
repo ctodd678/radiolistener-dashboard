@@ -137,7 +137,7 @@ async def get_detections(vmid: int):
 
 
 @app.get("/api/station/{vmid}/log")
-async def get_log(vmid: int, lines: int = 300):
+async def get_log(vmid: int, lines: int = 1000):
     s = find_station(vmid)
     return await api_get(s["api_url"], "/log", params={"lines": lines}) or {"log": ""}
 
@@ -303,6 +303,29 @@ async def get_archive_schedule(vmid: int, date: str):
     if data is None:
         raise HTTPException(status_code=404, detail="Not found")
     return data
+
+# --- virgin radio auto-submitter ---
+
+class VirginSubmitRequest(BaseModel):
+    keyword: str | None = None
+    force: bool = False
+    date: str | None = None
+
+
+@app.post("/api/station/{vmid}/virgin/submit")
+async def virgin_submit(vmid: int, body: VirginSubmitRequest = VirginSubmitRequest()):
+    s = find_station(vmid)
+    async with httpx.AsyncClient(timeout=130) as client:
+        r = await client.post(f"{s['api_url']}/virgin/submit", json=body.model_dump())
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/api/station/{vmid}/virgin/status")
+async def virgin_status(vmid: int):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/virgin/status") or {}
+
 
 # serve frontend
 FRONTEND_PATH = os.path.join(os.path.dirname(__file__), "dashboard_frontend")
