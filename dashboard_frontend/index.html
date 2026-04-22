@@ -1069,6 +1069,12 @@ async function runVirginSubmit(vmid) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keyword, force, date }),
     });
+    if (!res.ok) {
+      const text = await res.text();
+      out.innerHTML = `<span class="line-fail">HTTP ${res.status}: ${esc(text)}</span>`;
+      showToast(`Error ${res.status} — is api.py deployed on CT ${vmid}?`, 'error');
+      return;
+    }
     const data = await res.json();
 
     // colorize output lines
