@@ -988,6 +988,16 @@ async function renderArchiveContent(vmid, date, subtab) {
 }
 
 // --- contest submitter ---
+function renderSubmitted(status) {
+  const byProfile = status.by_profile || {};
+  const entries = Object.entries(byProfile);
+  if (!entries.length) return '<span style="color:var(--muted);font-size:11px">none yet</span>';
+  return entries.map(([email, keywords]) => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:5px">${esc(email)}</div>
+      <div class="contest-submitted">${keywords.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')}</div>
+    </div>`).join('');
+}
 async function loadContest(vmid) {
   const el = document.getElementById('tab-contest');
   el.innerHTML = '<div class="loading">loading...</div>';
@@ -1041,11 +1051,7 @@ async function loadContest(vmid) {
 
       <div>
         <div class="section-title" style="margin-bottom:8px">Submitted today</div>
-        <div class="contest-submitted" id="contest-submitted">
-          ${submitted.length
-            ? submitted.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')
-            : '<span style="color:var(--muted);font-size:11px">none yet</span>'}
-        </div>
+        <div id="contest-submitted">${renderSubmitted(status)}</div>
       </div>
     </div>`;
 }
@@ -1090,11 +1096,7 @@ async function runVirginSubmit(vmid) {
     // refresh submitted chips
     try {
       const status = await fetch(`${API}/api/station/${vmid}/virgin/status`).then(r => r.json());
-      const chips  = document.getElementById('contest-submitted');
-      const submitted = status.submitted_today || [];
-      chips.innerHTML = submitted.length
-        ? submitted.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')
-        : '<span style="color:var(--muted);font-size:11px">none yet</span>';
+      document.getElementById('contest-submitted').innerHTML = renderSubmitted(status);
     } catch (_) {}
 
   } catch (err) {
