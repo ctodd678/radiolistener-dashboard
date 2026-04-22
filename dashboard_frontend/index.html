@@ -1130,13 +1130,13 @@ setInterval(() => {
     .then(data => { stations = data; renderStations(stations); })
     .catch(() => {});
 
-  // only refresh tab content if not on log/transcript (to avoid losing scroll position)
+  // skip auto-refresh on tabs where interruption is disruptive
   const activeTab = document.querySelector('.tab.active')?.dataset.tab;
-  const skipRefresh = ['log', 'transcript'].includes(activeTab);
+  const skipRefresh = ['log', 'transcript', 'archive', 'contest'].includes(activeTab);
   if (selectedVmid && !skipRefresh) {
     loadTabContent(activeTab, selectedVmid);
   }
-}, 30000);
+}, 60000);
 </script>
 </body>
 </html>
