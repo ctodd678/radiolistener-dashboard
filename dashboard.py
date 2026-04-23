@@ -317,7 +317,8 @@ async def virgin_submit(vmid: int, body: VirginSubmitRequest = VirginSubmitReque
     s = find_station(vmid)
     async with httpx.AsyncClient(timeout=130) as client:
         r = await client.post(f"{s['api_url']}/virgin/submit", json=body.model_dump())
-        r.raise_for_status()
+        if not r.is_success:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
         return r.json()
 
 
