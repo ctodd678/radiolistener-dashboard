@@ -1012,9 +1012,11 @@ async function loadContest(vmid) {
 
   const submitted = status.submitted_today || [];
 
-  // build date options: today first, then archive dates that have a keyword_schedule
-  const dateOptions = [today, ...archiveDates.filter(d => d !== today)]
-    .map(d => `<option value="${d}">${d === today ? `${d} (today)` : d}</option>`)
+  // build date options: today first, then archive dates
+  // api.py falls back to most recent archive automatically, so always show today as first option
+  const allDates = [today, ...archiveDates.filter(d => d !== today)];
+  const dateOptions = allDates
+    .map(d => `<option value="${d}">${d === today ? `${d} (today — uses latest available schedule)` : d}</option>`)
     .join('');
 
   el.innerHTML = `
