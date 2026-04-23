@@ -1002,7 +1002,8 @@ async function loadContest(vmid) {
   const el = document.getElementById('tab-contest');
   el.innerHTML = '<div class="loading">loading...</div>';
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
   // load submission status + archive dates in parallel
   const [status, archiveDates] = await Promise.all([
