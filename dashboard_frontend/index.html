@@ -200,6 +200,63 @@
   .archive-subtab { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all .15s; }
   .archive-subtab:hover { color: var(--text); }
   .archive-subtab.active { border-color: var(--text); color: var(--text); }
+
+  /* ── Mobile ── */
+  @media (max-width: 640px) {
+    header { padding: 12px 16px; }
+    .logo { font-size: 16px; }
+    #clock { display: none; }
+    .header-btn { padding: 5px 8px; font-size: 10px; }
+
+    main { padding: 14px 12px; }
+
+    .stations-grid { grid-template-columns: 1fr; }
+
+    .detail-tabs { padding: 0 12px; }
+    .tab { padding: 10px 10px; font-size: 11px; }
+    .tab-content { padding: 14px 12px; }
+
+    /* log viewer shorter on mobile */
+    .log-viewer { height: 280px; font-size: 11px; }
+
+    /* schedule grid — fewer columns */
+    .schedule-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
+
+    /* config grid — single column */
+    .config-grid { grid-template-columns: 1fr; }
+    .hours-row { grid-template-columns: 1fr 1fr; }
+
+    /* keyword tester — stack vertically */
+    .test-layout { grid-template-columns: 1fr; }
+
+    /* archive — stack vertically */
+    .archive-layout { grid-template-columns: 1fr; }
+    .archive-dates { max-height: 160px; }
+
+    /* contest panel */
+    .contest-submit-row { flex-wrap: wrap; }
+    .contest-submit-row .contest-kw-input { min-width: 0; }
+    .btn-contest { width: 100%; }
+
+    /* dashboard config modal */
+    .dc-grid { grid-template-columns: 1fr; }
+
+    /* detections table — make text column wrap better */
+    .detections-table td { font-size: 11px; padding: 8px; }
+    .detection-time { font-size: 10px; }
+
+    /* toast stays usable */
+    #toast { left: 12px; right: 12px; bottom: 12px; text-align: center; }
+
+    /* stat numbers */
+    .stat-value { font-size: 15px; }
+
+    /* station card footer buttons — easier to tap */
+    .btn { padding: 8px 6px; font-size: 11px; }
+
+    /* keyword tags wrap nicely */
+    .kw-add-row { flex-wrap: wrap; }
+  }
 </style>
 </head>
 <body>
