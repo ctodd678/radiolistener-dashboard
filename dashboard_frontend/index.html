@@ -201,6 +201,11 @@
   .archive-subtab:hover { color: var(--text); }
   .archive-subtab.active { border-color: var(--text); color: var(--text); }
 
+  /* hour navigation */
+  .hour-nav { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .hour-nav-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 3px 9px; border-radius: 3px; font-family: var(--font-mono); font-size: 10px; cursor: pointer; transition: all .12s; font-variant-numeric: tabular-nums; }
+  .hour-nav-btn:hover { border-color: var(--text); color: var(--text); background: #16161c; }
+
   /* ── Mobile ── */
   @media (max-width: 640px) {
     header { padding: 12px 16px; }
@@ -516,14 +521,15 @@ async function loadLog(vmid) {
   if (!isReload) el.innerHTML = '<div class="loading">loading...</div>';
   try {
     const data = await fetch(`${API}/api/station/${vmid}/log?lines=2000`).then(r=>r.json());
+    const hourNav = buildHourNav(data.log, 'log-lv');
     el.innerHTML = `
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="copy-btn">copy all</button>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+        ${hourNav || '<div></div>'}
+        <button class="copy-btn" style="flex-shrink:0">copy all</button>
       </div>
-      <div class="log-viewer" id="lv">${colorizeLog(data.log)}</div>`;
+      <div class="log-viewer" id="log-lv">${colorizeLog(data.log)}</div>`;
     el.querySelector('.copy-btn').onclick = () => copyRaw(data.log, el.querySelector('.copy-btn'));
-    const lv = document.getElementById('lv');
-    // restore scroll position if reloading, otherwise scroll to bottom
+    const lv = document.getElementById('log-lv');
     if (prevScroll !== null && prevScroll < lv.scrollHeight - lv.clientHeight - 50) {
       lv.scrollTop = prevScroll;
     } else {
@@ -540,13 +546,15 @@ async function loadTranscript(vmid) {
   if (!isReload) el.innerHTML = '<div class="loading">loading...</div>';
   try {
     const data = await fetch(`${API}/api/station/${vmid}/transcript?lines=2000`).then(r=>r.json());
+    const hourNav = buildHourNav(data.transcript, 'transcript-lv');
     el.innerHTML = `
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="copy-btn">copy all</button>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+        ${hourNav || '<div></div>'}
+        <button class="copy-btn" style="flex-shrink:0">copy all</button>
       </div>
-      <div class="log-viewer">${esc(data.transcript)}</div>`;
+      <div class="log-viewer" id="transcript-lv">${colorizeTranscript(data.transcript)}</div>`;
     el.querySelector('.copy-btn').onclick = () => copyRaw(data.transcript, el.querySelector('.copy-btn'));
-    const lv = el.querySelector('.log-viewer');
+    const lv = document.getElementById('transcript-lv');
     if (prevScroll !== null && prevScroll < lv.scrollHeight - lv.clientHeight - 50) {
       lv.scrollTop = prevScroll;
     } else {
@@ -994,15 +1002,18 @@ async function renderArchiveContent(vmid, date, subtab) {
   try {
     if (subtab === 'transcript') {
       const data = await fetch(`${API}/api/station/${vmid}/archive/${date}/transcript`).then(r=>r.json());
-      document.getElementById('archive-body').innerHTML = `<div class="log-viewer">${esc(data.transcript)}</div>`;
+      const hourNav = buildHourNav(data.transcript, 'arch-tr-lv');
+      document.getElementById('archive-body').innerHTML = `${hourNav}<div class="log-viewer" id="arch-tr-lv">${colorizeTranscript(data.transcript)}</div>`;
       document.getElementById('archive-copy-btn').onclick = () => copyRaw(data.transcript, document.getElementById('archive-copy-btn'));
-      document.getElementById('archive-body').querySelector('.log-viewer').scrollTop = 999999;
+      const lv = document.getElementById('arch-tr-lv');
+      lv.scrollTop = lv.scrollHeight;
 
     } else if (subtab === 'log') {
       const data = await fetch(`${API}/api/station/${vmid}/archive/${date}/log`).then(r=>r.json());
-      document.getElementById('archive-body').innerHTML = `<div class="log-viewer">${colorizeLog(data.log)}</div>`;
+      const hourNav = buildHourNav(data.log, 'arch-log-lv');
+      document.getElementById('archive-body').innerHTML = `${hourNav}<div class="log-viewer" id="arch-log-lv">${colorizeLog(data.log)}</div>`;
       document.getElementById('archive-copy-btn').onclick = () => copyRaw(data.log, document.getElementById('archive-copy-btn'));
-      const lv = document.getElementById('archive-body').querySelector('.log-viewer');
+      const lv = document.getElementById('arch-log-lv');
       lv.scrollTop = lv.scrollHeight;
 
     } else if (subtab === 'detections') {
@@ -1071,10 +1082,9 @@ async function loadContest(vmid) {
   const submitted = status.submitted_today || [];
 
   // build date options: today first, then archive dates
-  // api.py falls back to most recent archive automatically, so always show today as first option
   const allDates = [today, ...archiveDates.filter(d => d !== today)];
   const dateOptions = allDates
-    .map(d => `<option value="${d}">${d === today ? `${d} (today — uses latest available schedule)` : d}</option>`)
+    .map(d => `<option value="${d}">${d === today ? `${d} (today)` : d}</option>`)
     .join('');
 
   el.innerHTML = `
@@ -1083,11 +1093,15 @@ async function loadContest(vmid) {
 
       <div>
         <div class="section-title" style="margin-bottom:8px">Schedule date</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <select class="contest-kw-input" id="contest-date" style="flex:0 0 auto;width:220px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <select class="contest-kw-input" id="contest-date" style="flex:0 0 auto;width:200px" onchange="loadContestSchedule(${vmid}, this.value)">
             ${dateOptions}
           </select>
-          <span style="font-size:11px;color:var(--muted)">reads <code>keyword_schedule.json</code> for that date</span>
+          <span style="font-size:11px;color:var(--muted)">keywords from <code>keyword_schedule.json</code> for that date</span>
+        </div>
+        <div style="margin-top:10px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Keywords in schedule</div>
+          <div id="contest-schedule" class="contest-submitted"><span style="color:var(--muted);font-size:11px">loading...</span></div>
         </div>
       </div>
 
@@ -1114,6 +1128,9 @@ async function loadContest(vmid) {
         <div id="contest-submitted">${renderSubmitted(status)}</div>
       </div>
     </div>`;
+
+  // load schedule for the default selected date (today)
+  loadContestSchedule(vmid, today);
 }
 
 async function runVirginSubmit(vmid) {
@@ -1170,14 +1187,72 @@ async function runVirginSubmit(vmid) {
 
 // --- helpers ---
 function colorizeLog(raw) {
-  return esc(raw).split('\n').map(line => {
-    if (line.includes('KEYWORD DETECTED')||line.includes('[!]')) return `<span class="log-line-detect">${line}</span>`;
-    if (line.includes('STRICT MATCH')||line.includes('SPELLING MATCH')||line.includes('SHORTCODE MATCH')) return `<span class="log-line-match">${line}</span>`;
-    if (line.includes('[EXCLUDED]')||line.includes('[HALLUCINATION]')) return `<span class="log-line-excl">${line}</span>`;
-    if (line.includes('crash')||line.includes('stall')||line.includes('Error')) return `<span class="log-line-crash">${line}</span>`;
-    if (line.includes('[BATCH]')||line.includes('HEARTBEAT')||line.includes('SCHEDULER')) return `<span class="log-line-batch">${line}</span>`;
-    return `<span style="color:#505065">${line}</span>`;
+  return raw.split('\n').map(line => {
+    const hm = line.match(/\b(\d{2}):\d{2}:\d{2}\b/);
+    const ha = hm ? ` data-hour="${hm[1]}"` : '';
+    const e = esc(line);
+    if (line.includes('KEYWORD DETECTED')||line.includes('[!]')) return `<span class="log-line-detect"${ha}>${e}</span>`;
+    if (line.includes('STRICT MATCH')||line.includes('SPELLING MATCH')||line.includes('SHORTCODE MATCH')) return `<span class="log-line-match"${ha}>${e}</span>`;
+    if (line.includes('[EXCLUDED]')||line.includes('[HALLUCINATION]')) return `<span class="log-line-excl"${ha}>${e}</span>`;
+    if (line.includes('crash')||line.includes('stall')||line.includes('Error')) return `<span class="log-line-crash"${ha}>${e}</span>`;
+    if (line.includes('[BATCH]')||line.includes('HEARTBEAT')||line.includes('SCHEDULER')) return `<span class="log-line-batch"${ha}>${e}</span>`;
+    return `<span style="color:#505065"${ha}>${e}</span>`;
   }).join('\n');
+}
+
+function colorizeTranscript(raw) {
+  return raw.split('\n').map(line => {
+    const hm = line.match(/\b(\d{2}):\d{2}:\d{2}\b/);
+    const ha = hm ? ` data-hour="${hm[1]}"` : '';
+    return `<span${ha}>${esc(line)}</span>`;
+  }).join('\n');
+}
+
+// build clickable hour jump buttons for a log/transcript viewer
+function buildHourNav(raw, lvId) {
+  const hours = new Set();
+  for (const m of raw.matchAll(/\b(\d{2}):\d{2}:\d{2}\b/g)) hours.add(m[1]);
+  if (hours.size < 2) return '';
+  return `<div class="hour-nav">${[...hours].sort().map(h =>
+    `<button class="hour-nav-btn" onclick="scrollViewerToHour('${lvId}','${h}')">${h}:00</button>`
+  ).join('')}</div>`;
+}
+
+function scrollViewerToHour(lvId, hour) {
+  const lv = document.getElementById(lvId);
+  if (!lv) return;
+  const target = lv.querySelector(`[data-hour="${hour}"]`);
+  if (!target) return;
+  const lvRect  = lv.getBoundingClientRect();
+  const tRect   = target.getBoundingClientRect();
+  lv.scrollTop += tRect.top - lvRect.top - 8;
+}
+
+async function loadContestSchedule(vmid, date) {
+  const el = document.getElementById('contest-schedule');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--muted);font-size:11px">loading...</span>';
+  try {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    let data;
+    if (!date || date === today) {
+      data = await fetch(`${API}/api/station/${vmid}/schedule`).then(r => r.json());
+    } else {
+      data = await fetch(`${API}/api/station/${vmid}/archive/${date}/schedule`).then(r => r.json()).catch(() => null);
+    }
+    const slots = data?.slots || [];
+    const keywords = [...new Set(
+      slots.filter(s => s.keyword && s.keyword.toLowerCase() !== 'unclear').map(s => s.keyword.toUpperCase())
+    )];
+    if (!keywords.length) {
+      el.innerHTML = '<span style="color:var(--muted);font-size:11px">no keywords in schedule for this date</span>';
+      return;
+    }
+    el.innerHTML = keywords.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('');
+  } catch {
+    el.innerHTML = '<span style="color:var(--muted);font-size:11px">could not load schedule</span>';
+  }
 }
 
 function esc(str) {
