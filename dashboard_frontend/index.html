@@ -1152,7 +1152,10 @@ async function loadContest(vmid) {
 // --- contest progress animation ---
 let _cpTimer = null;
 
-function _startContestProgress(out, keyword) {
+// container: the DOM element to render the progress bar into
+// kwIdx / kwTotal: e.g. "2 of 5" shown in the header when submitting multiple
+function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
+  if (_cpTimer) { clearTimeout(_cpTimer); _cpTimer = null; }
   const stages = [
     { t:     0, msg: 'Launching Chromium browser…' },
     { t:  5000, msg: 'Opening Virgin Radio contest page…' },
@@ -1165,11 +1168,12 @@ function _startContestProgress(out, keyword) {
     { t: 78000, msg: 'Saving submission record…' },
     { t: 90000, msg: 'Almost done — wrapping up…' },
   ];
-  const totalMs = 105000; // estimate; bar caps at 95% until response arrives
+  const totalMs = 105000;
+  const header = kwTotal > 1 ? `Keyword ${kwIdx} of ${kwTotal}${keyword ? ': ' + keyword : ''}` : 'Launching…';
 
-  out.innerHTML = `
+  container.innerHTML = `
     <div style="margin-bottom:10px">
-      <div id="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">Launching…</div>
+      <div id="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">${esc(header)}</div>
       <div style="background:#16161c;border-radius:3px;height:5px;overflow:hidden">
         <div id="cp-bar" style="height:100%;width:0%;border-radius:3px;background:#4d9de0;transition:width 2s ease"></div>
       </div>
@@ -1210,77 +1214,114 @@ function _finishContestProgress(success) {
   }
 }
 
+function _colorizeOutput(text) {
+  return text.split('\n').map(line => {
+    if (line.includes('SUCCESS'))  return `<span class="line-success">${esc(line)}</span>`;
+    if (/[Ff]ail|[Ee]rror/.test(line)) return `<span class="line-fail">${esc(line)}</span>`;
+    return `<span style="color:#505065">${esc(line)}</span>`;
+  }).join('\n');
+}
+
 async function runVirginSubmit(vmid) {
   const btn   = document.getElementById('contest-submit-btn');
   const input = document.getElementById('contest-kw-input');
   const force = document.getElementById('contest-force').checked;
   const out   = document.getElementById('contest-output');
+  const date  = document.getElementById('contest-date')?.value || null;
 
-  const keyword = input.value.trim() || null;
-  const date    = document.getElementById('contest-date')?.value || null;
+  const manualKeyword = input.value.trim() || null;
 
-  // --- validation ---
-  if (!keyword) {
-    // no manual keyword — check that the schedule actually has something to submit
-    const chips = document.getElementById('contest-schedule');
-    const hasScheduleKeywords = chips && chips.querySelector('.contest-kw-chip');
-    if (!hasScheduleKeywords) {
-      out.innerHTML = '<span class="line-fail">Cannot submit: no keyword entered and the schedule for this date has no keywords.\nEnter a keyword manually or edit the schedule slots above and save.</span>';
+  // --- build the list of keywords to submit ---
+  let keywords;
+  if (manualKeyword) {
+    keywords = [manualKeyword.toUpperCase()];
+  } else {
+    // pull from schedule data already loaded in the editor
+    const slots = contestScheduleData?.slots || [];
+    keywords = [...new Set(
+      slots.filter(s => s.keyword && s.keyword.toLowerCase() !== 'unclear')
+           .map(s => s.keyword.toUpperCase())
+    )];
+    if (!keywords.length) {
+      out.innerHTML = '<span class="line-fail">Cannot submit: no keyword entered and the schedule for this date has no keywords.\nEnter a keyword manually or edit and save the schedule slots above.</span>';
       toast('No keywords to submit', 'error');
       return;
     }
   }
 
   btn.disabled = true;
-  btn.textContent = '⏳ running…';
-  _startContestProgress(out, keyword);
 
-  try {
-    const res = await fetch(`${API}/api/station/${vmid}/virgin/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keyword, force, date }),
-    });
-    if (!res.ok) {
-      _finishContestProgress(false);
-      const text = await res.text();
-      setTimeout(() => {
-        out.innerHTML = `<span class="line-fail">HTTP ${res.status}: ${esc(text)}</span>`;
-      }, 350);
-      toast(`Error ${res.status} — is api.py deployed on CT ${vmid}?`, 'error');
-      return;
-    }
-    const data = await res.json();
+  // Split output area into a live-progress section and a results log
+  out.innerHTML = '<div id="cp-current"></div><div id="cp-results" style="margin-top:6px;font-size:11px;line-height:2"></div>';
 
-    _finishContestProgress(data.ok);
-    toast(data.ok ? 'Keyword submitted!' : 'Submission may have failed — check output', data.ok ? 'success' : 'error');
+  const resultLines = [];
+  let anySuccess = false;
 
-    // let the bar animate to completion, then swap in the colorized output
-    setTimeout(() => {
-      out.innerHTML = data.output.split('\n').map(line => {
-        if (line.includes('SUCCESS'))  return `<span class="line-success">${esc(line)}</span>`;
-        if (line.includes('Failed') || line.includes('error') || line.includes('fail'))
-          return `<span class="line-fail">${esc(line)}</span>`;
-        return esc(line);
-      }).join('\n');
-    }, 500);
+  for (let i = 0; i < keywords.length; i++) {
+    const kw = keywords[i];
+    btn.textContent = `⏳ ${i + 1}/${keywords.length}…`;
 
-    // refresh submitted chips
+    const cpCurrent = document.getElementById('cp-current');
+    _startContestProgress(cpCurrent, kw, i + 1, keywords.length);
+
     try {
-      const status = await fetch(`${API}/api/station/${vmid}/virgin/status`).then(r => r.json());
-      document.getElementById('contest-submitted').innerHTML = renderSubmitted(status);
-    } catch (_) {}
+      const res = await fetch(`${API}/api/station/${vmid}/virgin/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: kw, force, date }),
+      });
 
-  } catch (err) {
-    _finishContestProgress(false);
-    setTimeout(() => {
-      out.innerHTML = `<span class="line-fail">Error: ${esc(err.message)}</span>`;
-    }, 350);
-    toast('Request failed', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '▶ Submit';
+      if (!res.ok) {
+        const text = await res.text();
+        _finishContestProgress(false);
+        resultLines.push(`<span class="line-fail">✗ ${esc(kw)}: HTTP ${res.status} — ${esc(text)}</span>`);
+        document.getElementById('cp-results').innerHTML = resultLines.join('<br>');
+        toast(`Error ${res.status} from CT ${vmid}`, 'error');
+        break; // stop on hard HTTP error
+      }
+
+      const data = await res.json();
+      anySuccess = anySuccess || data.ok;
+      _finishContestProgress(data.ok);
+
+      // brief result chip for this keyword, plus collapsible raw output
+      const statusIcon = data.ok ? '✓' : '✗';
+      const statusCls  = data.ok ? 'line-success' : 'line-fail';
+      const rawId = `raw-${i}`;
+      resultLines.push(
+        `<span class="${statusCls}">${statusIcon} ${esc(kw)}</span>` +
+        ` <span style="color:#404055;font-size:10px;cursor:pointer" onclick="document.getElementById('${rawId}').style.display=document.getElementById('${rawId}').style.display==='none'?'block':'none'">[details]</span>` +
+        `<div id="${rawId}" style="display:none;margin:2px 0 6px;font-size:10px;white-space:pre-wrap">${_colorizeOutput(data.output)}</div>`
+      );
+      document.getElementById('cp-results').innerHTML = resultLines.join('');
+
+    } catch (err) {
+      _finishContestProgress(false);
+      resultLines.push(`<span class="line-fail">✗ ${esc(kw)}: ${esc(err.message)}</span>`);
+      document.getElementById('cp-results').innerHTML = resultLines.join('');
+      toast('Request failed', 'error');
+      break;
+    }
+
+    // let the completion bar animate before starting the next keyword
+    if (i < keywords.length - 1) await new Promise(r => setTimeout(r, 700));
   }
+
+  // clear progress bar, show final toast
+  await new Promise(r => setTimeout(r, 450));
+  const cpCurrent = document.getElementById('cp-current');
+  if (cpCurrent) cpCurrent.innerHTML = '';
+
+  toast(anySuccess ? 'Submission complete!' : 'All submissions failed — check output', anySuccess ? 'success' : 'error');
+
+  // refresh submitted-today chips
+  try {
+    const status = await fetch(`${API}/api/station/${vmid}/virgin/status`).then(r => r.json());
+    document.getElementById('contest-submitted').innerHTML = renderSubmitted(status);
+  } catch (_) {}
+
+  btn.disabled = false;
+  btn.textContent = '▶ Submit';
 }
 
 // --- helpers ---
