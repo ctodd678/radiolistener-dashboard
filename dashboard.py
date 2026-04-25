@@ -332,6 +332,16 @@ async def virgin_submit(vmid: int, body: VirginSubmitRequest = VirginSubmitReque
         return r.json()
 
 
+class VirginSubmissionsUpdate(BaseModel):
+    data: dict
+
+
+@app.post("/api/station/{vmid}/virgin/submissions")
+async def update_virgin_submissions(vmid: int, body: VirginSubmissionsUpdate):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/virgin/submissions", {"data": body.data})
+
+
 @app.get("/api/station/{vmid}/virgin/status")
 async def virgin_status(vmid: int):
     s = find_station(vmid)

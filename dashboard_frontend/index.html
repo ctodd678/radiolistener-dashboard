@@ -1072,8 +1072,53 @@ function renderSubmitted(status) {
   return entries.map(([email, keywords]) => `
     <div style="margin-bottom:10px">
       <div style="font-size:11px;color:var(--muted);margin-bottom:5px">${esc(email)}</div>
-      <div class="contest-submitted">${keywords.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')}</div>
+      <div class="contest-submitted">${keywords.map(k => `
+        <div class="contest-kw-chip" style="display:flex;align-items:center;gap:5px">
+          <span>${esc(k)}</span>
+          <span class="kw-tag-remove" onclick="removeSubmission(${JSON.stringify(email)},${JSON.stringify(k)})" title="remove">×</span>
+        </div>`).join('')}
+      </div>
     </div>`).join('');
+}
+
+function removeSubmission(email, keyword) {
+  if (!contestSubmissionsData) return;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  if (!contestSubmissionsData[today]) return;
+
+  // remove the matching "email:KEYWORD" entry
+  const target = `${email}:${keyword}`;
+  contestSubmissionsData[today] = contestSubmissionsData[today].filter(e => e !== target);
+
+  // rebuild by_profile from the edited list and re-render chips
+  const byProfile = {};
+  for (const e of contestSubmissionsData[today]) {
+    const idx = e.indexOf(':');
+    if (idx === -1) continue;
+    const em = e.slice(0, idx), kw = e.slice(idx + 1);
+    (byProfile[em] = byProfile[em] || []).push(kw);
+  }
+  document.getElementById('contest-submitted').innerHTML = renderSubmitted({ by_profile: byProfile });
+
+  // reveal the save button
+  const btn = document.getElementById('contest-submissions-save');
+  if (btn) btn.style.display = '';
+}
+
+async function saveContestSubmissions(vmid) {
+  if (!contestSubmissionsData) return;
+  try {
+    const r = await fetch(`${API}/api/station/${vmid}/virgin/submissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: contestSubmissionsData }),
+    });
+    if (!r.ok) { toast('save failed', 'error'); return; }
+    toast('submissions saved');
+    const btn = document.getElementById('contest-submissions-save');
+    if (btn) btn.style.display = 'none';
+  } catch { toast('save failed', 'error'); }
 }
 async function loadContest(vmid) {
   const el = document.getElementById('tab-contest');
@@ -1088,6 +1133,7 @@ async function loadContest(vmid) {
     fetch(`${API}/api/station/${vmid}/archive/list`).then(r => r.json()).catch(() => []),
   ]);
 
+  contestSubmissionsData = status.all || {};
   const submitted = status.submitted_today || [];
 
   // build date options: today first, then archive dates
@@ -1140,7 +1186,10 @@ async function loadContest(vmid) {
       </div>
 
       <div>
-        <div class="section-title" style="margin-bottom:8px">Submitted today</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="section-title" style="margin:0">Submitted today</div>
+          <button class="btn-contest" id="contest-submissions-save" style="padding:4px 12px;font-size:11px;display:none" onclick="saveContestSubmissions(${vmid})">save changes</button>
+        </div>
         <div id="contest-submitted">${renderSubmitted(status)}</div>
       </div>
     </div>`;
@@ -1317,6 +1366,7 @@ async function runVirginSubmit(vmid) {
   // refresh submitted-today chips
   try {
     const status = await fetch(`${API}/api/station/${vmid}/virgin/status`).then(r => r.json());
+    contestSubmissionsData = status.all || contestSubmissionsData;
     document.getElementById('contest-submitted').innerHTML = renderSubmitted(status);
   } catch (_) {}
 
