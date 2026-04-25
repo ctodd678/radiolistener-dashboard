@@ -22,6 +22,11 @@
   .logo { font-family: var(--font-display); font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
   .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+  @keyframes cpFill { from { width: 3%; } to { width: 95%; } }
+  .cp-bar { height: 100%; border-radius: 4px; background: #4d9de0; width: 3%; }
+  .cp-bar.running { animation: cpFill 105s linear forwards; }
+  .cp-bar.done-ok  { animation: none; width: 100% !important; background: #3ddc84 !important; transition: width 0.4s ease, background 0.3s; }
+  .cp-bar.done-err { animation: none; width: 100% !important; background: #ff4d6d !important; transition: width 0.4s ease, background 0.3s; }
   .header-right { display: flex; align-items: center; gap: 12px; }
   #clock { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
   .header-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; transition: all .15s; }
@@ -1219,24 +1224,22 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
     { t: 78000, msg: 'Saving submission record…' },
     { t: 90000, msg: 'Almost done — wrapping up…' },
   ];
-  const totalMs = 105000;
   const header = kwTotal > 1 ? `Keyword ${kwIdx} of ${kwTotal}${keyword ? ': ' + keyword : ''}` : 'Launching…';
 
   container.innerHTML = `
     <div style="margin-bottom:10px">
       <div class="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">${esc(header)}</div>
-      <div style="background:#1e1e28;border-radius:4px;height:7px;overflow:hidden;margin-bottom:4px">
-        <div class="cp-bar" style="height:100%;width:3%;border-radius:4px;background:#4d9de0;transition:width 0.8s ease"></div>
+      <div style="background:#1e1e28;border-radius:4px;height:8px;overflow:hidden;margin-bottom:4px">
+        <div class="cp-bar running"></div>
       </div>
     </div>
     <div class="cp-log" style="font-size:10px;color:#484860;line-height:2"></div>`;
 
-  // Capture refs immediately — do NOT rely on getElementById inside the tick
-  // closure, since those lookups can fail if the DOM is mutated concurrently.
-  const barEl   = container.querySelector('.cp-bar');
+  // The bar fills via CSS animation (@keyframes cpFill) — no JS width updates needed.
+  // JS only drives the stage label and log text.
+  _cpBarEl = container.querySelector('.cp-bar');
   const stageEl = container.querySelector('.cp-stage');
   const logEl   = container.querySelector('.cp-log');
-  _cpBarEl = barEl;
 
   const t0 = Date.now();
   let si = 0;
@@ -1244,10 +1247,6 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
 
   const tick = () => {
     const elapsed = Date.now() - t0;
-    // start at 3% so the bar is immediately visible; fill to 95% over totalMs
-    const pct = Math.min(95, 3 + Math.round(elapsed / totalMs * 92));
-    if (barEl) barEl.style.width = pct + '%';
-
     while (si < stages.length && elapsed >= stages[si].t) {
       const ts = new Date().toTimeString().slice(0, 8);
       lines.push(`[${ts}] ${stages[si].msg}`);
@@ -1264,9 +1263,8 @@ function _finishContestProgress(success) {
   if (_cpTimer) { clearTimeout(_cpTimer); _cpTimer = null; }
   const bar = _cpBarEl || document.querySelector('.cp-bar');
   if (bar) {
-    bar.style.transition = 'width 0.35s ease';
-    bar.style.width = '100%';
-    bar.style.background = success ? 'var(--green)' : 'var(--red)';
+    bar.classList.remove('running');
+    bar.classList.add(success ? 'done-ok' : 'done-err');
   }
   _cpBarEl = null;
 }
