@@ -1076,7 +1076,7 @@ function renderSubmitted(status) {
       <div class="contest-submitted">${keywords.map(k => `
         <div class="contest-kw-chip" style="display:flex;align-items:center;gap:5px">
           <span>${esc(k)}</span>
-          <span class="kw-tag-remove" onclick="removeSubmission(${JSON.stringify(email)},${JSON.stringify(k)})" title="remove">×</span>
+          <span class="kw-tag-remove" onclick="removeSubmission('${email}','${k}')" title="remove">×</span>
         </div>`).join('')}
       </div>
     </div>`).join('');
