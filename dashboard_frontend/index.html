@@ -336,6 +336,7 @@ let kwData = null;
 let cfgData = null;
 let dcData = null;
 let contestScheduleData = null;
+let contestSubmissionsData = null;
 
 function updateClock() {
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-CA', { hour12: false });
@@ -1200,6 +1201,7 @@ async function loadContest(vmid) {
 
 // --- contest progress animation ---
 let _cpTimer = null;
+let _cpBarEl  = null;   // kept so _finishContestProgress can find the bar without getElementById
 
 // container: the DOM element to render the progress bar into
 // kwIdx / kwTotal: e.g. "2 of 5" shown in the header when submitting multiple
@@ -1222,12 +1224,19 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
 
   container.innerHTML = `
     <div style="margin-bottom:10px">
-      <div id="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">${esc(header)}</div>
-      <div style="background:#16161c;border-radius:3px;height:5px;overflow:hidden">
-        <div id="cp-bar" style="height:100%;width:0%;border-radius:3px;background:#4d9de0;transition:width 2s ease"></div>
+      <div class="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">${esc(header)}</div>
+      <div style="background:#1e1e28;border-radius:4px;height:7px;overflow:hidden;margin-bottom:4px">
+        <div class="cp-bar" style="height:100%;width:3%;border-radius:4px;background:#4d9de0;transition:width 0.8s ease"></div>
       </div>
     </div>
-    <div id="cp-log" style="font-size:10px;color:#484860;line-height:2"></div>`;
+    <div class="cp-log" style="font-size:10px;color:#484860;line-height:2"></div>`;
+
+  // Capture refs immediately — do NOT rely on getElementById inside the tick
+  // closure, since those lookups can fail if the DOM is mutated concurrently.
+  const barEl   = container.querySelector('.cp-bar');
+  const stageEl = container.querySelector('.cp-stage');
+  const logEl   = container.querySelector('.cp-log');
+  _cpBarEl = barEl;
 
   const t0 = Date.now();
   let si = 0;
@@ -1235,17 +1244,15 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
 
   const tick = () => {
     const elapsed = Date.now() - t0;
-    const pct = Math.min(95, Math.round(elapsed / totalMs * 95));
-    const bar = document.getElementById('cp-bar');
-    if (bar) bar.style.width = pct + '%';
+    // start at 3% so the bar is immediately visible; fill to 95% over totalMs
+    const pct = Math.min(95, 3 + Math.round(elapsed / totalMs * 92));
+    if (barEl) barEl.style.width = pct + '%';
 
     while (si < stages.length && elapsed >= stages[si].t) {
       const ts = new Date().toTimeString().slice(0, 8);
       lines.push(`[${ts}] ${stages[si].msg}`);
-      const stEl = document.getElementById('cp-stage');
-      if (stEl) stEl.textContent = stages[si].msg;
-      const logEl = document.getElementById('cp-log');
-      if (logEl) logEl.innerHTML = lines.slice(-5).map(l => esc(l)).join('<br>');
+      if (stageEl) stageEl.textContent = stages[si].msg;
+      if (logEl)   logEl.innerHTML = lines.slice(-5).map(l => esc(l)).join('<br>');
       si++;
     }
     if (elapsed < 125000) _cpTimer = setTimeout(tick, 500);
@@ -1255,12 +1262,13 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
 
 function _finishContestProgress(success) {
   if (_cpTimer) { clearTimeout(_cpTimer); _cpTimer = null; }
-  const bar = document.getElementById('cp-bar');
+  const bar = _cpBarEl || document.querySelector('.cp-bar');
   if (bar) {
     bar.style.transition = 'width 0.35s ease';
     bar.style.width = '100%';
     bar.style.background = success ? 'var(--green)' : 'var(--red)';
   }
+  _cpBarEl = null;
 }
 
 function _colorizeOutput(text) {
