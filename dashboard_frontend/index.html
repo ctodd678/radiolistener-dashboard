@@ -67,7 +67,8 @@
   .detail-panel.visible { display: block; }
   .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
   .detail-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; }
-  .detail-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 20px; overflow-x: auto; }
+  .detail-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 20px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; }
+  .detail-tabs::-webkit-scrollbar { display: none; }
   .tab { padding: 12px 14px; font-size: 12px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; user-select: none; white-space: nowrap; }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--text); border-bottom-color: var(--text); }
@@ -224,8 +225,8 @@
 
     .stations-grid { grid-template-columns: 1fr; }
 
-    .detail-tabs { padding: 0 12px; }
-    .tab { padding: 10px 10px; font-size: 11px; }
+    .detail-tabs { padding: 0 8px; }
+    .tab { padding: 10px 7px; font-size: 10px; }
     .tab-content { padding: 14px 12px; }
 
     /* log viewer shorter on mobile */
@@ -1148,6 +1149,67 @@ async function loadContest(vmid) {
   loadContestSchedule(vmid, today);
 }
 
+// --- contest progress animation ---
+let _cpTimer = null;
+
+function _startContestProgress(out, keyword) {
+  const stages = [
+    { t:     0, msg: 'Launching Chromium browser…' },
+    { t:  5000, msg: 'Opening Virgin Radio contest page…' },
+    { t: 14000, msg: 'Waiting for Aptivada widget to load…' },
+    { t: 24000, msg: 'Entering email address…' },
+    { t: 33000, msg: keyword ? `Entering keyword: ${keyword}` : 'Entering keyword from schedule…' },
+    { t: 45000, msg: 'Clicking the Submit button…' },
+    { t: 55000, msg: 'Waiting for confirmation page…' },
+    { t: 65000, msg: "Clicking I'm Done…" },
+    { t: 78000, msg: 'Saving submission record…' },
+    { t: 90000, msg: 'Almost done — wrapping up…' },
+  ];
+  const totalMs = 105000; // estimate; bar caps at 95% until response arrives
+
+  out.innerHTML = `
+    <div style="margin-bottom:10px">
+      <div id="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">Launching…</div>
+      <div style="background:#16161c;border-radius:3px;height:5px;overflow:hidden">
+        <div id="cp-bar" style="height:100%;width:0%;border-radius:3px;background:#4d9de0;transition:width 2s ease"></div>
+      </div>
+    </div>
+    <div id="cp-log" style="font-size:10px;color:#484860;line-height:2"></div>`;
+
+  const t0 = Date.now();
+  let si = 0;
+  const lines = [];
+
+  const tick = () => {
+    const elapsed = Date.now() - t0;
+    const pct = Math.min(95, Math.round(elapsed / totalMs * 95));
+    const bar = document.getElementById('cp-bar');
+    if (bar) bar.style.width = pct + '%';
+
+    while (si < stages.length && elapsed >= stages[si].t) {
+      const ts = new Date().toTimeString().slice(0, 8);
+      lines.push(`[${ts}] ${stages[si].msg}`);
+      const stEl = document.getElementById('cp-stage');
+      if (stEl) stEl.textContent = stages[si].msg;
+      const logEl = document.getElementById('cp-log');
+      if (logEl) logEl.innerHTML = lines.slice(-5).map(l => esc(l)).join('<br>');
+      si++;
+    }
+    if (elapsed < 125000) _cpTimer = setTimeout(tick, 500);
+  };
+  _cpTimer = setTimeout(tick, 80);
+}
+
+function _finishContestProgress(success) {
+  if (_cpTimer) { clearTimeout(_cpTimer); _cpTimer = null; }
+  const bar = document.getElementById('cp-bar');
+  if (bar) {
+    bar.style.transition = 'width 0.35s ease';
+    bar.style.width = '100%';
+    bar.style.background = success ? 'var(--green)' : 'var(--red)';
+  }
+}
+
 async function runVirginSubmit(vmid) {
   const btn   = document.getElementById('contest-submit-btn');
   const input = document.getElementById('contest-kw-input');
@@ -1170,8 +1232,8 @@ async function runVirginSubmit(vmid) {
   }
 
   btn.disabled = true;
-  btn.textContent = '⏳ running...';
-  out.textContent = 'Starting submitter (may take ~30s)...\n';
+  btn.textContent = '⏳ running…';
+  _startContestProgress(out, keyword);
 
   try {
     const res = await fetch(`${API}/api/station/${vmid}/virgin/submit`, {
@@ -1180,22 +1242,28 @@ async function runVirginSubmit(vmid) {
       body: JSON.stringify({ keyword, force, date }),
     });
     if (!res.ok) {
+      _finishContestProgress(false);
       const text = await res.text();
-      out.innerHTML = `<span class="line-fail">HTTP ${res.status}: ${esc(text)}</span>`;
+      setTimeout(() => {
+        out.innerHTML = `<span class="line-fail">HTTP ${res.status}: ${esc(text)}</span>`;
+      }, 350);
       toast(`Error ${res.status} — is api.py deployed on CT ${vmid}?`, 'error');
       return;
     }
     const data = await res.json();
 
-    // colorize output lines
-    out.innerHTML = data.output.split('\n').map(line => {
-      if (line.includes('SUCCESS'))  return `<span class="line-success">${esc(line)}</span>`;
-      if (line.includes('Failed') || line.includes('error') || line.includes('fail'))
-        return `<span class="line-fail">${esc(line)}</span>`;
-      return esc(line);
-    }).join('\n');
-
+    _finishContestProgress(data.ok);
     toast(data.ok ? 'Keyword submitted!' : 'Submission may have failed — check output', data.ok ? 'success' : 'error');
+
+    // let the bar animate to completion, then swap in the colorized output
+    setTimeout(() => {
+      out.innerHTML = data.output.split('\n').map(line => {
+        if (line.includes('SUCCESS'))  return `<span class="line-success">${esc(line)}</span>`;
+        if (line.includes('Failed') || line.includes('error') || line.includes('fail'))
+          return `<span class="line-fail">${esc(line)}</span>`;
+        return esc(line);
+      }).join('\n');
+    }, 500);
 
     // refresh submitted chips
     try {
@@ -1204,7 +1272,10 @@ async function runVirginSubmit(vmid) {
     } catch (_) {}
 
   } catch (err) {
-    out.innerHTML = `<span class="line-fail">Error: ${esc(err.message)}</span>`;
+    _finishContestProgress(false);
+    setTimeout(() => {
+      out.innerHTML = `<span class="line-fail">Error: ${esc(err.message)}</span>`;
+    }, 350);
     toast('Request failed', 'error');
   } finally {
     btn.disabled = false;
