@@ -201,6 +201,13 @@
   .archive-subtab:hover { color: var(--text); }
   .archive-subtab.active { border-color: var(--text); color: var(--text); }
 
+  /* contest schedule editor */
+  .schedule-editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+  .schedule-editor-slot { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 8px 8px 6px; }
+  .schedule-kw-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--muted); font-family: var(--font-mono); font-size: 11px; padding: 3px 2px; outline: none; text-align: center; margin-top: 4px; letter-spacing: .04em; }
+  .schedule-kw-input.has-keyword { color: var(--green); }
+  .schedule-kw-input:focus { border-bottom-color: #4d9de0; color: var(--text); }
+
   /* hour navigation */
   .hour-nav { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
   .hour-nav-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 3px 9px; border-radius: 3px; font-family: var(--font-mono); font-size: 10px; cursor: pointer; transition: all .12s; font-variant-numeric: tabular-nums; }
@@ -327,6 +334,7 @@ let stations = [];
 let kwData = null;
 let cfgData = null;
 let dcData = null;
+let contestScheduleData = null;
 
 function updateClock() {
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-CA', { hour12: false });
@@ -1103,6 +1111,13 @@ async function loadContest(vmid) {
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Keywords in schedule</div>
           <div id="contest-schedule" class="contest-submitted"><span style="color:var(--muted);font-size:11px">loading...</span></div>
         </div>
+        <div style="margin-top:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Edit schedule slots</div>
+            <button class="btn-contest" style="padding:4px 12px;font-size:11px" onclick="saveContestSchedule(${vmid})">save schedule</button>
+          </div>
+          <div id="contest-schedule-editor" class="schedule-editor-grid"><span style="color:var(--muted);font-size:11px">loading...</span></div>
+        </div>
       </div>
 
       <div>
@@ -1141,6 +1156,18 @@ async function runVirginSubmit(vmid) {
 
   const keyword = input.value.trim() || null;
   const date    = document.getElementById('contest-date')?.value || null;
+
+  // --- validation ---
+  if (!keyword) {
+    // no manual keyword — check that the schedule actually has something to submit
+    const chips = document.getElementById('contest-schedule');
+    const hasScheduleKeywords = chips && chips.querySelector('.contest-kw-chip');
+    if (!hasScheduleKeywords) {
+      out.innerHTML = '<span class="line-fail">Cannot submit: no keyword entered and the schedule for this date has no keywords.\nEnter a keyword manually or edit the schedule slots above and save.</span>';
+      toast('No keywords to submit', 'error');
+      return;
+    }
+  }
 
   btn.disabled = true;
   btn.textContent = '⏳ running...';
@@ -1229,9 +1256,14 @@ function scrollViewerToHour(lvId, hour) {
 }
 
 async function loadContestSchedule(vmid, date) {
-  const el = document.getElementById('contest-schedule');
-  if (!el) return;
-  el.innerHTML = '<span style="color:var(--muted);font-size:11px">loading...</span>';
+  const chipsEl  = document.getElementById('contest-schedule');
+  const editorEl = document.getElementById('contest-schedule-editor');
+  if (!chipsEl && !editorEl) return;
+
+  const loading = '<span style="color:var(--muted);font-size:11px">loading...</span>';
+  if (chipsEl)  chipsEl.innerHTML  = loading;
+  if (editorEl) editorEl.innerHTML = loading;
+
   try {
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -1241,18 +1273,85 @@ async function loadContestSchedule(vmid, date) {
     } else {
       data = await fetch(`${API}/api/station/${vmid}/archive/${date}/schedule`).then(r => r.json()).catch(() => null);
     }
+
+    contestScheduleData = data || null;
     const slots = data?.slots || [];
-    const keywords = [...new Set(
-      slots.filter(s => s.keyword && s.keyword.toLowerCase() !== 'unclear').map(s => s.keyword.toUpperCase())
-    )];
-    if (!keywords.length) {
-      el.innerHTML = '<span style="color:var(--muted);font-size:11px">no keywords in schedule for this date</span>';
-      return;
+
+    // update keyword chips (non-unclear only)
+    if (chipsEl) {
+      const keywords = [...new Set(
+        slots.filter(s => s.keyword && s.keyword.toLowerCase() !== 'unclear').map(s => s.keyword.toUpperCase())
+      )];
+      chipsEl.innerHTML = keywords.length
+        ? keywords.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')
+        : '<span style="color:var(--muted);font-size:11px">no keywords in schedule for this date</span>';
     }
-    el.innerHTML = keywords.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('');
+
+    // render editor
+    if (editorEl) {
+      if (!slots.length) {
+        editorEl.innerHTML = '<span style="color:var(--muted);font-size:11px">no schedule data for this date — run the app during contest hours to generate it</span>';
+      } else {
+        editorEl.innerHTML = slots.map(slot => {
+          const hasKw = slot.keyword && slot.keyword.toLowerCase() !== 'unclear';
+          return `<div class="schedule-editor-slot">
+            <div class="slot-hour">${esc(slot.label)}</div>
+            <input class="schedule-kw-input${hasKw ? ' has-keyword' : ''}"
+                   data-hour="${slot.hour}"
+                   value="${esc(slot.keyword || 'unclear')}"
+                   placeholder="unclear"
+                   oninput="this.classList.toggle('has-keyword', this.value.trim() !== '' && this.value.trim().toLowerCase() !== 'unclear')">
+          </div>`;
+        }).join('');
+      }
+    }
   } catch {
-    el.innerHTML = '<span style="color:var(--muted);font-size:11px">could not load schedule</span>';
+    const err = '<span style="color:var(--muted);font-size:11px">could not load schedule</span>';
+    if (chipsEl)  chipsEl.innerHTML  = err;
+    if (editorEl) editorEl.innerHTML = err;
   }
+}
+
+async function saveContestSchedule(vmid) {
+  if (!contestScheduleData) { toast('no schedule loaded', 'error'); return; }
+  const inputs = document.querySelectorAll('#contest-schedule-editor .schedule-kw-input');
+  if (!inputs.length) { toast('no schedule slots to save', 'error'); return; }
+
+  // read edited values into a slot-hour → keyword map
+  const slotMap = {};
+  inputs.forEach(inp => { slotMap[parseInt(inp.dataset.hour)] = (inp.value.trim() || 'unclear').toLowerCase(); });
+
+  const now = new Date();
+  const updatedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} `
+    + `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+  const updatedData = {
+    ...contestScheduleData,
+    updated_at: updatedAt,
+    slots: (contestScheduleData.slots || []).map(s => ({ ...s, keyword: slotMap[s.hour] ?? s.keyword })),
+  };
+
+  try {
+    const r = await fetch(`${API}/api/station/${vmid}/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: updatedData }),
+    });
+    if (!r.ok) { toast('save failed', 'error'); return; }
+    contestScheduleData = updatedData;
+    toast('schedule saved');
+    // refresh chips to reflect edits
+    const date = document.getElementById('contest-date')?.value;
+    const chips = document.getElementById('contest-schedule');
+    if (chips) {
+      const keywords = [...new Set(
+        updatedData.slots.filter(s => s.keyword && s.keyword !== 'unclear').map(s => s.keyword.toUpperCase())
+      )];
+      chips.innerHTML = keywords.length
+        ? keywords.map(k => `<div class="contest-kw-chip">${esc(k)}</div>`).join('')
+        : '<span style="color:var(--muted);font-size:11px">no keywords in schedule for this date</span>';
+    }
+  } catch { toast('save failed', 'error'); }
 }
 
 function esc(str) {

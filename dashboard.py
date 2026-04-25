@@ -193,6 +193,16 @@ async def get_schedule(vmid: int):
     return data or {"slots": [], "updated_at": None, "summary": None}
 
 
+class ScheduleUpdate(BaseModel):
+    data: dict
+
+
+@app.post("/api/station/{vmid}/schedule")
+async def update_schedule(vmid: int, body: ScheduleUpdate):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/schedule", {"data": body.data})
+
+
 class TestPayload(BaseModel):
     text: str
     keywords: dict
