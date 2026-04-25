@@ -22,11 +22,12 @@
   .logo { font-family: var(--font-display); font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
   .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
-  @keyframes cpFill { from { width: 3%; } to { width: 95%; } }
-  .cp-bar { height: 100%; border-radius: 4px; background: #4d9de0; width: 3%; }
-  .cp-bar.running { animation: cpFill 105s linear forwards; }
-  .cp-bar.done-ok  { animation: none; width: 100% !important; background: #3ddc84 !important; transition: width 0.4s ease, background 0.3s; }
-  .cp-bar.done-err { animation: none; width: 100% !important; background: #ff4d6d !important; transition: width 0.4s ease, background 0.3s; }
+  @keyframes cpFill { from { transform: scaleX(0.03); } to { transform: scaleX(0.95); } }
+  .cp-track { background: #1e1e28; border-radius: 4px; height: 8px; margin-bottom: 4px; overflow: hidden; }
+  .cp-fill  { display: block; width: 100%; height: 8px; background: #4d9de0; transform: scaleX(0.03); transform-origin: left center; }
+  .cp-fill.running  { animation: cpFill 105s linear forwards; }
+  .cp-fill.done-ok  { animation: none !important; transform: scaleX(1) !important; background: #3ddc84 !important; }
+  .cp-fill.done-err { animation: none !important; transform: scaleX(1) !important; background: #ff4d6d !important; }
   .header-right { display: flex; align-items: center; gap: 12px; }
   #clock { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
   .header-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; transition: all .15s; }
@@ -1229,15 +1230,15 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
   container.innerHTML = `
     <div style="margin-bottom:10px">
       <div class="cp-stage" style="font-size:11px;color:var(--muted);margin-bottom:7px">${esc(header)}</div>
-      <div style="background:#1e1e28;border-radius:4px;height:8px;overflow:hidden;margin-bottom:4px">
-        <div class="cp-bar running"></div>
+      <div class="cp-track">
+        <div class="cp-fill running"></div>
       </div>
     </div>
     <div class="cp-log" style="font-size:10px;color:#484860;line-height:2"></div>`;
 
   // The bar fills via CSS animation (@keyframes cpFill) — no JS width updates needed.
   // JS only drives the stage label and log text.
-  _cpBarEl = container.querySelector('.cp-bar');
+  _cpBarEl = container.querySelector('.cp-fill');
   const stageEl = container.querySelector('.cp-stage');
   const logEl   = container.querySelector('.cp-log');
 
@@ -1261,7 +1262,7 @@ function _startContestProgress(container, keyword, kwIdx = 1, kwTotal = 1) {
 
 function _finishContestProgress(success) {
   if (_cpTimer) { clearTimeout(_cpTimer); _cpTimer = null; }
-  const bar = _cpBarEl || document.querySelector('.cp-bar');
+  const bar = _cpBarEl || document.querySelector('.cp-fill');
   if (bar) {
     bar.classList.remove('running');
     bar.classList.add(success ? 'done-ok' : 'done-err');
