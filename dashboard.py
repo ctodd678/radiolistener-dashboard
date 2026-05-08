@@ -8,6 +8,7 @@ Or let systemd handle it via rldashboard.service.
 
 import json
 import os
+import shlex
 import subprocess
 import time
 from datetime import datetime
@@ -346,6 +347,109 @@ async def update_virgin_submissions(vmid: int, body: VirginSubmissionsUpdate):
 async def virgin_status(vmid: int):
     s = find_station(vmid)
     return await api_get(s["api_url"], "/virgin/status") or {}
+
+
+# --- CHUM SMS auto-submitter ---
+#
+# The Mac runs chum_sms.py (under radiolistener/chum-sms) to send SMS via
+# Messages.app + iPhone Text Message Forwarding. The dashboard "Run Now"
+# button SSHs to the Mac and invokes the script. SSH config lives in
+# dashboard_config.json under "chum_sms":
+#   {
+#     "ssh_user":    "ctodd678",
+#     "ssh_host":    "192.168.2.X",
+#     "script_path": "/Users/ctodd678/Documents/Github/radiolistener/chum-sms/chum_sms.py"
+#   }
+# If the Mac is asleep/off the SSH call fails fast with a clear error.
+
+DEFAULT_CHUM_SCRIPT = "/Users/ctodd678/Documents/Github/radiolistener/chum-sms/chum_sms.py"
+
+
+def _chum_sms_ssh_config():
+    cfg = (load_config().get("chum_sms") or {})
+    user = cfg.get("ssh_user")
+    host = cfg.get("ssh_host")
+    script = cfg.get("script_path", DEFAULT_CHUM_SCRIPT)
+    if not user or not host:
+        raise HTTPException(
+            status_code=400,
+            detail="chum_sms.ssh_user / chum_sms.ssh_host not set in dashboard_config.json"
+        )
+    return user, host, script
+
+
+@app.get("/api/station/{vmid}/sms/status")
+async def get_sms_status(vmid: int):
+    s = find_station(vmid)
+    return await api_get(s["api_url"], "/sms/status") or {}
+
+
+class SmsMarkSent(BaseModel):
+    keyword: str
+
+
+@app.post("/api/station/{vmid}/sms/mark-sent")
+async def mark_sms_sent(vmid: int, body: SmsMarkSent):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/sms/mark-sent", body.model_dump())
+
+
+class SmsSubmissionsUpdate(BaseModel):
+    data: dict
+
+
+@app.post("/api/station/{vmid}/sms/submissions")
+async def update_sms_submissions(vmid: int, body: SmsSubmissionsUpdate):
+    s = find_station(vmid)
+    return await api_post(s["api_url"], "/sms/submissions", {"data": body.data})
+
+
+class SmsRunRequest(BaseModel):
+    keyword: str | None = None
+    dry_run: bool = False
+
+
+@app.post("/api/station/{vmid}/sms/run")
+def run_sms(vmid: int, body: SmsRunRequest = SmsRunRequest()):
+    """SSH to the Mac and trigger chum_sms.py. Mac must be awake/reachable."""
+    find_station(vmid)  # validate vmid exists
+    user, host, script = _chum_sms_ssh_config()
+
+    cmd_parts = ["/usr/bin/python3", script]
+    if body.keyword:
+        cmd_parts += ["--keyword", body.keyword]
+    if body.dry_run:
+        cmd_parts += ["--dry-run"]
+    remote_cmd = " ".join(shlex.quote(p) for p in cmd_parts)
+
+    ssh_cmd = [
+        "ssh",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-o", "ConnectTimeout=5",
+        "-o", "BatchMode=yes",  # fail fast if no key auth — never prompt
+        f"{user}@{host}",
+        remote_cmd,
+    ]
+
+    try:
+        # Full run can take ~5 min for 14 keywords (20s × 13 delays + send time).
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            timeout=420,
+        )
+        return {
+            "ok":         result.returncode == 0,
+            "output":     (result.stdout + result.stderr).strip(),
+            "returncode": result.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="SSH/script timed out (420s)")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="ssh client not found on Proxmox host")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SSH failed: {e}")
 
 
 # serve frontend

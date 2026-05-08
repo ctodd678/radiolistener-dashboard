@@ -308,6 +308,7 @@
       <div class="tab" data-tab="test">Keyword Tester</div>
       <div class="tab" data-tab="archive">Archive</div>
       <div class="tab tab-virgin" data-tab="contest" style="display:none">Contest</div>
+      <div class="tab tab-chum" data-tab="sms" style="display:none">SMS</div>
     </div>
     <div class="tab-content active" id="tab-schedule"></div>
     <div class="tab-content" id="tab-detections"></div>
@@ -318,6 +319,7 @@
     <div class="tab-content" id="tab-test"></div>
     <div class="tab-content" id="tab-archive"></div>
     <div class="tab-content" id="tab-contest"></div>
+    <div class="tab-content" id="tab-sms"></div>
   </div>
 </main>
 
@@ -433,6 +435,7 @@ function renderStations(stations) {
 
 // vmids that have the virgin contest submitter
 const VIRGIN_VMIDS = [106];
+const CHUM_VMIDS   = [105];
 
 function selectStation(vmid) {
   selectedVmid = vmid;
@@ -440,18 +443,23 @@ function selectStation(vmid) {
   document.getElementById('detail-title').textContent = s ? s.name : `CT ${vmid}`;
   renderStations(stations);
 
-  // show Contest tab only for Virgin Radio
+  // show station-specific tabs only for the right stations
   document.querySelectorAll('.tab-virgin').forEach(t => {
     t.style.display = VIRGIN_VMIDS.includes(vmid) ? '' : 'none';
+  });
+  document.querySelectorAll('.tab-chum').forEach(t => {
+    t.style.display = CHUM_VMIDS.includes(vmid) ? '' : 'none';
   });
 
   const panel = document.getElementById('detail-panel');
   panel.classList.add('visible');
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  // if Contest tab was active but we switched to a non-virgin station, fall back
+  // if a station-specific tab was active but doesn't apply to this station, fall back
   let activeTab = document.querySelector('.tab.active')?.dataset.tab || 'schedule';
-  if (activeTab === 'contest' && !VIRGIN_VMIDS.includes(vmid)) {
+  const wrongVirgin = activeTab === 'contest' && !VIRGIN_VMIDS.includes(vmid);
+  const wrongChum   = activeTab === 'sms'     && !CHUM_VMIDS.includes(vmid);
+  if (wrongVirgin || wrongChum) {
     activeTab = 'schedule';
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'schedule'));
   }
@@ -468,6 +476,7 @@ async function loadTabContent(tab, vmid) {
   else if (tab === 'test')       loadTester(vmid);
   else if (tab === 'archive')    loadArchive(vmid);
   else if (tab === 'contest')    loadContest(vmid);
+  else if (tab === 'sms')        loadSmsContest(vmid);
 }
 
 // --- schedule ---
@@ -1143,6 +1152,211 @@ async function renderArchiveContent(vmid, date, subtab) {
     document.getElementById('archive-body').innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
   }
 }
+
+// --- CHUM SMS contest ---
+//
+// CHUM keywords are texted to a shortcode (104536), not Playwright-submitted.
+// The Mac runs chum_sms.py which sends SMS via Messages.app → iPhone Text
+// Message Forwarding (so they originate from the user's real cell number).
+// The dashboard hits POST /sms/run which SSHes to the Mac and runs the script.
+// SSH config lives in dashboard_config.json under "chum_sms".
+
+let smsStatusData    = null;
+let _smsCurrentVmid  = null;
+
+function smsTodayStr() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
+async function loadSmsContest(vmid) {
+  _smsCurrentVmid = vmid;
+  const el = document.getElementById('tab-sms');
+  el.innerHTML = '<div class="loading">loading...</div>';
+  try {
+    const status = await fetch(`${API}/api/station/${vmid}/sms/status`).then(r => r.json());
+    smsStatusData = status;
+    renderSmsContest(vmid);
+  } catch {
+    el.innerHTML = '<div class="empty-state" style="color:var(--red)">failed to load — is the API reachable?</div>';
+  }
+}
+
+function renderSmsContest(vmid) {
+  const el = document.getElementById('tab-sms');
+  if (!smsStatusData) { el.innerHTML = '<div class="loading">loading...</div>'; return; }
+
+  const today          = smsStatusData.today || smsTodayStr();
+  const allKeywords    = smsStatusData.schedule_keywords || [];
+  const pending        = smsStatusData.pending || [];
+  const sentToday      = smsStatusData.sent_today || [];
+  const allLog         = smsStatusData.all || {};
+
+  // Build the keywords-grid (color-coded by status)
+  const sentSet = new Set(sentToday.map(e => e.split('@',1)[0].trim().toUpperCase()));
+  const slotsHtml = allKeywords.length
+    ? allKeywords.map(k => {
+        const isSent = sentSet.has(k.keyword);
+        const cls    = `schedule-slot${isSent?' has-keyword':''}`;
+        const status = isSent ? '✓ sent' : 'pending';
+        return `<div class="${cls}">
+          <div class="slot-hour">${esc(k.label || '')}</div>
+          <div class="slot-keyword ${isSent?'found':'unclear'}">${esc(k.keyword)}</div>
+          <div style="font-size:10px;color:${isSent?'var(--green)':'var(--muted)'};margin-top:3px">${status}</div>
+        </div>`;
+      }).join('')
+    : '<span style="color:var(--muted);font-size:11px">no keywords detected for today yet — keep waiting</span>';
+
+  // Sent chips (with × buttons to remove, like the Virgin tab)
+  const sentChipsHtml = sentToday.length
+    ? sentToday.map((entry, i) => {
+        const [kw, ts] = entry.split('@', 2);
+        return `<div class="contest-kw-chip" style="display:flex;align-items:center;gap:5px">
+          <span>${esc(kw)}</span>
+          <span style="font-size:9px;color:var(--muted)">${esc(ts || '')}</span>
+          <span class="kw-tag-remove" onclick="removeSmsSubmission(${i})" title="remove">×</span>
+        </div>`;
+      }).join('')
+    : '<span style="color:var(--muted);font-size:11px">none yet</span>';
+
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:18px">
+
+      <!-- run controls -->
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Run on Mac</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <button class="btn-contest" id="sms-run-all" onclick="runSmsAll(${vmid})">▶ Send all pending (${pending.length})</button>
+          <input class="contest-kw-input" id="sms-kw-input" placeholder="single keyword (overrides)" style="flex:1;min-width:160px">
+          <button class="btn-contest" id="sms-run-one" onclick="runSmsOne(${vmid})" style="border-color:var(--muted);color:var(--muted)">▶ Send one</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">
+            <input type="checkbox" id="sms-dry-run"> dry-run
+          </label>
+        </div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.6">
+          SSHes to your Mac and runs <code>chum_sms.py</code>. Mac must be awake.
+          Each keyword goes out as <code>KEYWORD Connor Todd</code> to <code>104536</code>,
+          with a 20s gap between sends. A 14-keyword run takes ~5 minutes.
+        </div>
+      </div>
+
+      <!-- output -->
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Output</div>
+        <div class="contest-output" id="sms-output">${pending.length ? 'Ready.' : 'Nothing pending.'}</div>
+      </div>
+
+      <!-- today's keyword schedule with sent/pending status -->
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Today's Keywords (${today})</div>
+        <div class="schedule-grid">${slotsHtml}</div>
+      </div>
+
+      <!-- sent today chips -->
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="section-title" style="margin:0">Sent Today</div>
+          <button class="btn-contest" id="sms-submissions-save" style="padding:4px 12px;font-size:11px;display:none" onclick="saveSmsSubmissions(${vmid})">save changes</button>
+        </div>
+        <div class="contest-submitted" id="sms-sent-chips">${sentChipsHtml}</div>
+      </div>
+
+    </div>`;
+}
+
+// remove a single sent entry (× button)
+function removeSmsSubmission(idx) {
+  if (!smsStatusData) return;
+  const today = smsStatusData.today || smsTodayStr();
+  const all = smsStatusData.all = (smsStatusData.all || {});
+  all[today] = all[today] || [];
+  if (idx < 0 || idx >= all[today].length) return;
+  all[today].splice(idx, 1);
+  // also keep sent_today in sync for the local re-render
+  smsStatusData.sent_today = [...all[today]];
+  // recompute pending from schedule_keywords
+  const sentSet = new Set(all[today].map(e => e.split('@',1)[0].trim().toUpperCase()));
+  smsStatusData.pending = (smsStatusData.schedule_keywords || []).filter(k => !sentSet.has(k.keyword));
+  // re-render in-place using the cached vmid (no re-fetch — preserves edits)
+  renderSmsContest(_smsCurrentVmid);
+  document.getElementById('sms-submissions-save').style.display = '';
+}
+
+async function saveSmsSubmissions(vmid) {
+  if (!smsStatusData) return;
+  try {
+    const r = await fetch(`${API}/api/station/${vmid}/sms/submissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: smsStatusData.all || {} }),
+    });
+    if (!r.ok) { toast('save failed', 'error'); return; }
+    toast('sent log updated');
+    document.getElementById('sms-submissions-save').style.display = 'none';
+    // reload to get fresh canonical state
+    loadSmsContest(vmid);
+  } catch { toast('save failed', 'error'); }
+}
+
+async function runSmsOne(vmid) {
+  const input  = document.getElementById('sms-kw-input');
+  const dryRun = document.getElementById('sms-dry-run').checked;
+  const kw     = (input.value || '').trim().toUpperCase();
+  if (!kw) { toast('enter a keyword', 'error'); return; }
+  await _runSms(vmid, { keyword: kw, dry_run: dryRun });
+  input.value = '';
+}
+
+async function runSmsAll(vmid) {
+  if (!smsStatusData || !(smsStatusData.pending || []).length) {
+    toast('nothing pending to send', 'error');
+    return;
+  }
+  const dryRun = document.getElementById('sms-dry-run').checked;
+  const count  = smsStatusData.pending.length;
+  if (!dryRun && !confirm(`Send all ${count} pending keywords? Takes ~${Math.ceil(count*20/60)} min.`)) return;
+  await _runSms(vmid, { dry_run: dryRun });
+}
+
+async function _runSms(vmid, body) {
+  const out  = document.getElementById('sms-output');
+  const btnA = document.getElementById('sms-run-all');
+  const btnO = document.getElementById('sms-run-one');
+  if (btnA) btnA.disabled = true;
+  if (btnO) btnO.disabled = true;
+  out.innerHTML = '<span style="color:var(--muted)">⏳ Running on Mac… (this can take several minutes for a full run)</span>';
+
+  try {
+    const r = await fetch(`${API}/api/station/${vmid}/sms/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (!r.ok) {
+      out.innerHTML = `<span class="line-fail">✗ ${esc(data.detail || `HTTP ${r.status}`)}</span>`;
+      toast('run failed — check Mac is awake & SSH set up', 'error');
+    } else {
+      const lines = (data.output || '').split('\n').map(l => {
+        if (/sent and logged|Run complete/.test(l)) return `<span class="line-success">${esc(l)}</span>`;
+        if (/failed|error|exception/i.test(l))      return `<span class="line-fail">${esc(l)}</span>`;
+        return `<span style="color:#505065">${esc(l)}</span>`;
+      }).join('\n');
+      out.innerHTML = `<pre style="white-space:pre-wrap;margin:0">${lines}</pre>`;
+      toast(data.ok ? 'run finished' : 'run finished with errors', data.ok ? 'success' : 'error');
+    }
+  } catch (e) {
+    out.innerHTML = `<span class="line-fail">✗ ${esc(e.message || e)}</span>`;
+    toast('request failed', 'error');
+  } finally {
+    if (btnA) btnA.disabled = false;
+    if (btnO) btnO.disabled = false;
+    // refresh status from the API to pick up newly-sent keywords
+    try { await loadSmsContest(vmid); } catch {}
+  }
+}
+
 
 // --- contest submitter ---
 function renderSubmitted(status) {
