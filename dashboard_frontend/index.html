@@ -1161,7 +1161,9 @@ async function renderArchiveContent(vmid, date, subtab) {
 // The dashboard hits POST /sms/run which SSHes to the Mac and runs the script.
 // SSH config lives in dashboard_config.json under "chum_sms".
 
-let smsStatusData    = null;
+let smsStatusData    = null;   // today's status response (sent log + today's schedule)
+let smsArchiveData   = null;   // when an archive date is selected: that day's schedule
+let smsSelectedDate  = null;   // null/today = "today", otherwise YYYY-MM-DD from archive
 let _smsCurrentVmid  = null;
 
 function smsTodayStr() {
@@ -1169,45 +1171,100 @@ function smsTodayStr() {
   return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
 }
 
+// Load status (today's sent log + today's schedule) AND the list of archive dates,
+// then render. The archive *schedule* itself is loaded lazily on date change.
 async function loadSmsContest(vmid) {
   _smsCurrentVmid = vmid;
+  smsArchiveData  = null;
+  smsSelectedDate = null;
   const el = document.getElementById('tab-sms');
   el.innerHTML = '<div class="loading">loading...</div>';
   try {
-    const status = await fetch(`${API}/api/station/${vmid}/sms/status`).then(r => r.json());
+    const [status, archiveDates] = await Promise.all([
+      fetch(`${API}/api/station/${vmid}/sms/status`).then(r => r.json()),
+      fetch(`${API}/api/station/${vmid}/archive/list`).then(r => r.json()).catch(() => []),
+    ]);
     smsStatusData = status;
+    smsStatusData._archiveDates = (archiveDates || []).filter(d => d !== status.today);
     renderSmsContest(vmid);
   } catch {
     el.innerHTML = '<div class="empty-state" style="color:var(--red)">failed to load — is the API reachable?</div>';
   }
 }
 
+// User picked a different date in the schedule selector. Reload that schedule.
+async function onSmsDateChange(vmid, date) {
+  const today = smsStatusData?.today || smsTodayStr();
+  if (!date || date === today) {
+    smsSelectedDate = null;
+    smsArchiveData  = null;
+    renderSmsContest(vmid);
+    return;
+  }
+  smsSelectedDate = date;
+  try {
+    smsArchiveData = await fetch(`${API}/api/station/${vmid}/archive/${date}/schedule`)
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
+  } catch { smsArchiveData = null; }
+  renderSmsContest(vmid);
+}
+
+// Build the keyword list for the active source (today vs archive).
+// Returns [{hour, label, keyword (UPPER)}, ...] excluding "unclear".
+function _smsActiveKeywords() {
+  if (smsSelectedDate && smsArchiveData) {
+    return (smsArchiveData.slots || [])
+      .filter(s => s.keyword && s.keyword.toLowerCase() !== 'unclear')
+      .map(s => ({ hour: s.hour, label: s.label, keyword: s.keyword.toUpperCase() }));
+  }
+  return smsStatusData?.schedule_keywords || [];
+}
+
 function renderSmsContest(vmid) {
   const el = document.getElementById('tab-sms');
   if (!smsStatusData) { el.innerHTML = '<div class="loading">loading...</div>'; return; }
 
-  const today          = smsStatusData.today || smsTodayStr();
-  const allKeywords    = smsStatusData.schedule_keywords || [];
-  const pending        = smsStatusData.pending || [];
-  const sentToday      = smsStatusData.sent_today || [];
-  const allLog         = smsStatusData.all || {};
+  const today        = smsStatusData.today || smsTodayStr();
+  const archiveDates = smsStatusData._archiveDates || [];
+  const isArchive    = !!smsSelectedDate;
+  const activeDate   = smsSelectedDate || today;
+  const activeKws    = _smsActiveKeywords();
+  const sentToday    = smsStatusData.sent_today || [];
 
-  // Build the keywords-grid (color-coded by status)
+  // pending = active source keywords that are NOT in TODAY's sent log.
+  // (Sending always logs against today, regardless of where the keywords came from.)
   const sentSet = new Set(sentToday.map(e => e.split('@',1)[0].trim().toUpperCase()));
-  const slotsHtml = allKeywords.length
-    ? allKeywords.map(k => {
-        const isSent = sentSet.has(k.keyword);
-        const cls    = `schedule-slot${isSent?' has-keyword':''}`;
-        const status = isSent ? '✓ sent' : 'pending';
-        return `<div class="${cls}">
-          <div class="slot-hour">${esc(k.label || '')}</div>
-          <div class="slot-keyword ${isSent?'found':'unclear'}">${esc(k.keyword)}</div>
-          <div style="font-size:10px;color:${isSent?'var(--green)':'var(--muted)'};margin-top:3px">${status}</div>
-        </div>`;
-      }).join('')
-    : '<span style="color:var(--muted);font-size:11px">no keywords detected for today yet — keep waiting</span>';
+  const pending = activeKws.filter(k => !sentSet.has(k.keyword));
 
-  // Sent chips (with × buttons to remove, like the Virgin tab)
+  // Date <select> options: today first, then archive dates
+  const allDates = [today, ...archiveDates];
+  const dateOptions = allDates.map(d =>
+    `<option value="${d}"${d === activeDate ? ' selected' : ''}>${d === today ? `${d} (today)` : d}</option>`
+  ).join('');
+
+  // Schedule grid for the active date — color-coded against today's sent log
+  let slotsHtml;
+  if (isArchive && !smsArchiveData) {
+    slotsHtml = '<span style="color:var(--red);font-size:11px">no archived schedule for this date</span>';
+  } else if (!activeKws.length) {
+    slotsHtml = isArchive
+      ? '<span style="color:var(--muted);font-size:11px">archived schedule has no usable keywords (all unclear)</span>'
+      : '<span style="color:var(--muted);font-size:11px">no keywords detected for today yet — keep waiting</span>';
+  } else {
+    slotsHtml = activeKws.map(k => {
+      const isSent = sentSet.has(k.keyword);
+      const cls    = `schedule-slot${isSent?' has-keyword':''}`;
+      const status = isSent ? '✓ sent today' : 'pending';
+      return `<div class="${cls}">
+        <div class="slot-hour">${esc(k.label || '')}</div>
+        <div class="slot-keyword ${isSent?'found':'unclear'}">${esc(k.keyword)}</div>
+        <div style="font-size:10px;color:${isSent?'var(--green)':'var(--muted)'};margin-top:3px">${status}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Sent-today chips
   const sentChipsHtml = sentToday.length
     ? sentToday.map((entry, i) => {
         const [kw, ts] = entry.split('@', 2);
@@ -1219,14 +1276,35 @@ function renderSmsContest(vmid) {
       }).join('')
     : '<span style="color:var(--muted);font-size:11px">none yet</span>';
 
+  const archiveBanner = isArchive
+    ? `<div style="background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:4px;padding:8px 12px;font-size:11px;color:var(--yellow);margin-bottom:10px">
+         Using archived schedule from <strong>${esc(activeDate)}</strong>.
+         Sends will still be logged under today's date (${esc(today)}).
+       </div>`
+    : '';
+
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:18px">
+
+      <!-- date selector -->
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Schedule date</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select class="contest-kw-input" id="sms-date" style="flex:0 0 auto;width:240px"
+                  onchange="onSmsDateChange(${vmid}, this.value)">
+            ${dateOptions}
+          </select>
+          <span style="font-size:11px;color:var(--muted)">pulls keywords from <code>${isArchive ? `archive/keyword_schedule_${esc(activeDate)}.json` : 'keyword_schedule.json'}</code></span>
+        </div>
+      </div>
+
+      ${archiveBanner}
 
       <!-- run controls -->
       <div>
         <div class="section-title" style="margin-bottom:8px">Run on Mac</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-          <button class="btn-contest" id="sms-run-all" onclick="runSmsAll(${vmid})">▶ Send all pending (${pending.length})</button>
+          <button class="btn-contest" id="sms-run-all" onclick="runSmsAll(${vmid})"${pending.length ? '' : ' disabled'}>▶ Send all pending (${pending.length})</button>
           <input class="contest-kw-input" id="sms-kw-input" placeholder="single keyword (overrides)" style="flex:1;min-width:160px">
           <button class="btn-contest" id="sms-run-one" onclick="runSmsOne(${vmid})" style="border-color:var(--muted);color:var(--muted)">▶ Send one</button>
           <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">
@@ -1235,7 +1313,7 @@ function renderSmsContest(vmid) {
         </div>
         <div style="font-size:10px;color:var(--muted);line-height:1.6">
           SSHes to your Mac and runs <code>chum_sms.py</code>. Mac must be awake.
-          Each keyword goes out as <code>KEYWORD Connor Todd</code> to <code>104536</code>,
+          Each keyword goes out as <code>Keyword Connor Todd</code> to <code>104536</code>,
           with a 20s gap between sends. A 14-keyword run takes ~5 minutes.
         </div>
       </div>
@@ -1243,19 +1321,19 @@ function renderSmsContest(vmid) {
       <!-- output -->
       <div>
         <div class="section-title" style="margin-bottom:8px">Output</div>
-        <div class="contest-output" id="sms-output">${pending.length ? 'Ready.' : 'Nothing pending.'}</div>
+        <div class="contest-output" id="sms-output">${pending.length ? 'Ready.' : 'Nothing pending for this date.'}</div>
       </div>
 
-      <!-- today's keyword schedule with sent/pending status -->
+      <!-- keyword grid for the active date -->
       <div>
-        <div class="section-title" style="margin-bottom:8px">Today's Keywords (${today})</div>
+        <div class="section-title" style="margin-bottom:8px">${isArchive ? `Keywords from ${esc(activeDate)}` : `Today's Keywords (${esc(today)})`}</div>
         <div class="schedule-grid">${slotsHtml}</div>
       </div>
 
-      <!-- sent today chips -->
+      <!-- sent today chips (always today's sent log, even on archive view) -->
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div class="section-title" style="margin:0">Sent Today</div>
+          <div class="section-title" style="margin:0">Sent Today (${esc(today)})</div>
           <button class="btn-contest" id="sms-submissions-save" style="padding:4px 12px;font-size:11px;display:none" onclick="saveSmsSubmissions(${vmid})">save changes</button>
         </div>
         <div class="contest-submitted" id="sms-sent-chips">${sentChipsHtml}</div>
@@ -1308,14 +1386,26 @@ async function runSmsOne(vmid) {
 }
 
 async function runSmsAll(vmid) {
-  if (!smsStatusData || !(smsStatusData.pending || []).length) {
-    toast('nothing pending to send', 'error');
-    return;
-  }
+  if (!smsStatusData) return;
+
+  // Compute pending against the *active* schedule (today or archive),
+  // filtering out anything already in today's sent log.
+  const activeKws = _smsActiveKeywords();
+  const sentSet   = new Set((smsStatusData.sent_today || []).map(e => e.split('@',1)[0].trim().toUpperCase()));
+  const pending   = activeKws.filter(k => !sentSet.has(k.keyword)).map(k => k.keyword);
+
+  if (!pending.length) { toast('nothing pending to send', 'error'); return; }
+
   const dryRun = document.getElementById('sms-dry-run').checked;
-  const count  = smsStatusData.pending.length;
-  if (!dryRun && !confirm(`Send all ${count} pending keywords? Takes ~${Math.ceil(count*20/60)} min.`)) return;
-  await _runSms(vmid, { dry_run: dryRun });
+  const isArc  = !!smsSelectedDate;
+  const label  = isArc ? `from ${smsSelectedDate}` : `for today`;
+  if (!dryRun && !confirm(
+        `Send ${pending.length} keywords ${label}? Takes ~${Math.ceil(pending.length*20/60)} min.\n\n` +
+        pending.join(', ')
+      )) return;
+
+  // Always pass the explicit list — works for today and archive identically.
+  await _runSms(vmid, { keywords: pending, dry_run: dryRun });
 }
 
 async function _runSms(vmid, body) {
@@ -1338,13 +1428,40 @@ async function _runSms(vmid, body) {
       out.innerHTML = `<span class="line-fail">✗ ${esc(data.detail || `HTTP ${r.status}`)}</span>`;
       toast('run failed — check Mac is awake & SSH set up', 'error');
     } else {
+      // Colorize lines from the script output. Keep the regex tight so the
+      // benign "Failed: 0" tally line doesn't get flagged red.
       const lines = (data.output || '').split('\n').map(l => {
-        if (/sent and logged|Run complete/.test(l)) return `<span class="line-success">${esc(l)}</span>`;
-        if (/failed|error|exception/i.test(l))      return `<span class="line-fail">${esc(l)}</span>`;
+        if (/sent and logged|Run complete\. Sent: \d+ \| Failed: 0\b/.test(l))
+          return `<span class="line-success">${esc(l)}</span>`;
+        if (/failed to send|cannot reach|applescript failed|not authorized|exception:|^ERROR|→ failed|HTTP \d{3}|Run complete\. Sent: \d+ \| Failed: [1-9]/i.test(l))
+          return `<span class="line-fail">${esc(l)}</span>`;
         return `<span style="color:#505065">${esc(l)}</span>`;
       }).join('\n');
-      out.innerHTML = `<pre style="white-space:pre-wrap;margin:0">${lines}</pre>`;
-      toast(data.ok ? 'run finished' : 'run finished with errors', data.ok ? 'success' : 'error');
+
+      // Parse a quick summary out of "Run complete. Sent: N | Failed: M"
+      const summary = (data.output || '').match(/Run complete\. Sent: (\d+) \| Failed: (\d+)/);
+      const sent    = summary ? parseInt(summary[1]) : null;
+      const failed  = summary ? parseInt(summary[2]) : null;
+
+      let banner = '';
+      if (!data.ok) {
+        // Most common: macOS TCC denies AppleScript→Messages over SSH.
+        const tccHint = /not authorized|applescript failed|-1743/i.test(data.output || '')
+          ? ' Looks like macOS Automation permission for SSH/Messages is not granted — see chum-sms/README §6.'
+          : '';
+        banner = `<div class="line-fail" style="margin-bottom:6px">✗ Script exited with code ${data.returncode}.${tccHint}</div>`;
+      } else if (failed && failed > 0) {
+        banner = `<div class="line-fail" style="margin-bottom:6px">⚠ ${sent} sent, ${failed} failed.</div>`;
+      } else if (sent !== null) {
+        banner = `<div class="line-success" style="margin-bottom:6px">✓ ${sent} sent successfully.</div>`;
+      }
+
+      out.innerHTML = `${banner}<pre style="white-space:pre-wrap;margin:0;font-size:10px;line-height:1.5">${lines}</pre>`;
+
+      // Toast picks the most informative outcome
+      if (!data.ok)               toast(`script error (exit ${data.returncode}) — see output`, 'error');
+      else if (failed && failed > 0) toast(`${sent} sent, ${failed} failed`, 'error');
+      else                        toast(`run finished${sent !== null ? ` (${sent} sent)` : ''}`, 'success');
     }
   } catch (e) {
     out.innerHTML = `<span class="line-fail">✗ ${esc(e.message || e)}</span>`;

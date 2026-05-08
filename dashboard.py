@@ -406,6 +406,7 @@ async def update_sms_submissions(vmid: int, body: SmsSubmissionsUpdate):
 
 class SmsRunRequest(BaseModel):
     keyword: str | None = None
+    keywords: list[str] | None = None  # explicit list (e.g. from an archive schedule)
     dry_run: bool = False
 
 
@@ -418,6 +419,16 @@ def run_sms(vmid: int, body: SmsRunRequest = SmsRunRequest()):
     cmd_parts = ["/usr/bin/python3", script]
     if body.keyword:
         cmd_parts += ["--keyword", body.keyword]
+    elif body.keywords:
+        # de-dup, normalize to upper-case, drop empties
+        seen, cleaned = set(), []
+        for k in body.keywords:
+            kw = (k or "").strip().upper()
+            if kw and kw not in seen:
+                seen.add(kw)
+                cleaned.append(kw)
+        if cleaned:
+            cmd_parts += ["--keywords", ",".join(cleaned)]
     if body.dry_run:
         cmd_parts += ["--dry-run"]
     remote_cmd = " ".join(shlex.quote(p) for p in cmd_parts)
