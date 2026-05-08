@@ -471,44 +471,117 @@ async function loadTabContent(tab, vmid) {
 }
 
 // --- schedule ---
+let scheduleData = null;
+let scheduleEditMode = false;
+
 async function loadSchedule(vmid) {
   const el = document.getElementById('tab-schedule');
   el.innerHTML = '<div class="loading">loading...</div>';
   try {
     const data = await fetch(`${API}/api/station/${vmid}/schedule`).then(r=>r.json());
+    scheduleData = data;
     const slots = data.slots || [];
-    const currentHour = new Date().getHours();
 
     if (!slots.length) {
       el.innerHTML = '<div class="empty-state">no schedule data yet — generates after the midday or end-of-day batch runs</div>';
       return;
     }
 
-    const updatedLabel = data.updated_at
-      ? `last updated ${data.updated_at.split(' ')[1].slice(0,5)} (${data.summary || ''})`
-      : 'no batch run yet today';
+    renderSchedule(vmid);
+  } catch {
+    el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
+  }
+}
 
-    const grid = slots.map(slot => {
-      const hasKeyword  = slot.keyword && slot.keyword !== 'unclear';
-      const isCurrent   = slot.hour === currentHour;
-      const cls = `schedule-slot${hasKeyword?' has-keyword':''}${isCurrent?' current-hour':''}`;
+function renderSchedule(vmid) {
+  const el = document.getElementById('tab-schedule');
+  if (!scheduleData) return;
+  const slots = scheduleData.slots || [];
+  const currentHour = new Date().getHours();
+
+  const updatedLabel = scheduleData.updated_at
+    ? `last updated ${scheduleData.updated_at.split(' ')[1].slice(0,5)} (${scheduleData.summary || ''})`
+    : 'no batch run yet today';
+
+  const grid = slots.map(slot => {
+    const hasKeyword  = slot.keyword && slot.keyword !== 'unclear';
+    const isCurrent   = slot.hour === currentHour;
+    const cls = `schedule-slot${hasKeyword?' has-keyword':''}${isCurrent?' current-hour':''}`;
+    if (scheduleEditMode) {
+      return `<div class="${cls}">
+        <div class="slot-hour">${slot.label}</div>
+        <input class="schedule-kw-input${hasKeyword?' has-keyword':''}"
+               data-hour="${slot.hour}"
+               value="${esc(slot.keyword || 'unclear')}"
+               placeholder="unclear"
+               oninput="this.classList.toggle('has-keyword', this.value.trim() !== '' && this.value.trim().toLowerCase() !== 'unclear')">
+      </div>`;
+    } else {
       const kwCls = hasKeyword ? 'found' : 'unclear';
       const kwText = hasKeyword ? slot.keyword.toUpperCase() : '—';
       return `<div class="${cls}">
         <div class="slot-hour">${slot.label}</div>
         <div class="slot-keyword ${kwCls}">${esc(kwText)}</div>
       </div>`;
-    }).join('');
+    }
+  }).join('');
 
-    el.innerHTML = `
-      <div class="schedule-header">
-        <div class="section-title" style="margin:0">Today's Keywords</div>
+  const editControls = scheduleEditMode
+    ? `<button class="btn-contest" style="padding:4px 12px;font-size:11px" onclick="saveSchedule(${vmid})">save</button>
+       <button class="header-btn" style="padding:5px 10px" onclick="cancelScheduleEdit(${vmid})">cancel</button>`
+    : `<button class="header-btn" style="padding:5px 10px" onclick="enterScheduleEdit(${vmid})">edit</button>`;
+
+  el.innerHTML = `
+    <div class="schedule-header">
+      <div class="section-title" style="margin:0">Today's Keywords</div>
+      <div style="display:flex;align-items:center;gap:10px">
         <div class="schedule-updated">${updatedLabel}</div>
+        ${editControls}
       </div>
-      <div class="schedule-grid">${grid}</div>`;
-  } catch {
-    el.innerHTML = `<div class="empty-state" style="color:var(--red)">failed to load</div>`;
-  }
+    </div>
+    <div class="schedule-grid">${grid}</div>`;
+}
+
+function enterScheduleEdit(vmid) {
+  scheduleEditMode = true;
+  renderSchedule(vmid);
+}
+
+function cancelScheduleEdit(vmid) {
+  scheduleEditMode = false;
+  loadSchedule(vmid);  // reload from server to discard local edits
+}
+
+async function saveSchedule(vmid) {
+  if (!scheduleData) return;
+  const inputs = document.querySelectorAll('#tab-schedule .schedule-kw-input');
+  if (!inputs.length) { toast('nothing to save', 'error'); return; }
+
+  const slotMap = {};
+  inputs.forEach(inp => { slotMap[parseInt(inp.dataset.hour)] = (inp.value.trim() || 'unclear').toLowerCase(); });
+
+  const now = new Date();
+  const updatedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} `
+    + `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+  const updatedData = {
+    ...scheduleData,
+    updated_at: updatedAt,
+    slots: (scheduleData.slots || []).map(s => ({ ...s, keyword: slotMap[s.hour] ?? s.keyword })),
+  };
+
+  try {
+    const r = await fetch(`${API}/api/station/${vmid}/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: updatedData }),
+    });
+    if (!r.ok) { toast('save failed', 'error'); return; }
+    scheduleData = updatedData;
+    scheduleEditMode = false;
+    renderSchedule(vmid);
+    toast('schedule saved');
+  } catch { toast('save failed', 'error'); }
 }
 
 // --- detections ---
